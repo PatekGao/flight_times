@@ -210,6 +210,7 @@ model.Params.Presolve = 1  # 基础预处理
 #
 # model.setObjective(smooth_obj, GRB.MINIMIZE)
 
+
 # === 随机生成优化目标 ===
 model.Params.Seed = random.randint(0, 1000)
 
