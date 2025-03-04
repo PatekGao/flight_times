@@ -13,4 +13,4 @@ ref_dep_int = df['INT_DEP'].values
 # print(ref_arr_int)
 # print(ref_dep_dom)
 # print(ref_dep_int)
-print(len(ref_arr_dom))
+# print(len(ref_arr_dom))

@@ -1,13 +1,10 @@
+import random
+
 import gurobipy as gp
-import numpy as np
 import pandas as pd
 from gurobipy import GRB
-from OR.pre_task1 import ref_arr_dom, ref_dep_int, ref_dep_dom, ref_arr_int
 
-H_arr_dom = [65, 22, 2, 2, 0, 0, 0, 2, 7, 36, 51, 55, 52, 55, 58, 52, 54, 45, 46, 53, 47, 47, 55, 60]
-H_arr_int = [6, 7, 15, 3, 7, 13, 11, 5, 4, 4, 3, 9, 7, 3, 4, 9, 7, 9, 7, 7, 6, 10, 11, 11]
-H_dep_dom = [2, 2, 3, 1, 0, 3, 56, 60, 70, 48, 48, 47, 52, 53, 40, 44, 40, 60, 52, 53, 55, 50, 17, 10]
-H_dep_int = [4, 11, 11, 11, 5, 6, 2, 6, 7, 16, 11, 2, 6, 9, 11, 6, 13, 4, 11, 5, 7, 3, 3, 7]
+from OR.pre_task1 import ref_arr_dom, ref_dep_int, ref_dep_dom, ref_arr_int
 
 # ref_arr = [42, 44, 40, 36, 35, 33, 31, 33, 29, 28, 25, 20, 15, 15, 15, 14, 16, 14, 12, 9, 8, 6, 6, 6, 7, 6, 5, 5, 3, 3,
 #            3, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4, 3,
@@ -29,27 +26,29 @@ H_dep_int = [4, 11, 11, 11, 5, 6, 2, 6, 7, 16, 11, 2, 6, 9, 11, 6, 13, 4, 11, 5,
 #            35, 34, 36, 40, 34, 35, 37, 38, 37, 37, 39, 39, 40, 42, 40, 35, 39, 36, 33, 32, 31, 30, 28, 28, 30, 33, 35,
 #            36, 36, 36, 36, 35, 38, 38, 38, 37, 37, 37, 34, 34, 30, 31, 31, 33, 32, 30, 28, 27, 23, 18, 19, 20, 18, 16,
 #            15, 14, 10, 11, 10, 10, 9, 8, 7, 5, 6, 5, 6, 5, 6, 8, 7, 6, 6, 6, 6, 6, 5, 5, 4, 4, 3, 0]
+# H_arr_dom, H_arr_int, H_dep_dom, H_dep_int 是长度为24的列表，表示每小时的总和
+H_arr_dom = [65, 22, 2, 2, 0, 0, 0, 2, 7, 36, 51, 55, 52, 55, 58, 52, 54, 45, 46, 53, 47, 47, 55, 60]
+H_arr_int = [6, 7, 15, 3, 7, 13, 11, 5, 4, 4, 3, 9, 7, 3, 4, 9, 7, 9, 7, 7, 6, 10, 11, 11]
+H_dep_dom = [2, 2, 3, 1, 0, 3, 56, 60, 70, 48, 48, 47, 52, 53, 40, 44, 40, 60, 52, 53, 55, 50, 17, 10]
+H_dep_int = [4, 11, 11, 11, 5, 6, 2, 6, 7, 16, 11, 2, 6, 9, 11, 6, 13, 4, 11, 5, 7, 3, 3, 7]
 
+# ARR_DOM_MAX, ARR_INT_MAX, DEP_DOM_MAX, DEP_INT_MAX 对应各分类的动态小时最大值
 ARR_DOM_MAX = 71
 ARR_INT_MAX = 16
 DEP_DOM_MAX = 77
 DEP_INT_MAX = 18
 
+# ARR_MAX, DEP_MAX, DOM_MAX, INT_MAX, TOT_MAX 是整合类别的动态小时最大值
 ARR_MAX = 78
 DEP_MAX = 86
 DOM_MAX = 119
 INT_MAX = 26
 TOT_MAX = 132
 
+# ARR_LIMIT, DEP_LIMIT, TOT_LIMIT 是每五分钟的最大值
 ARR_LIMIT = 12
 DEP_LIMIT = 12
 TOT_LIMIT = 20
-
-# H_arr_dom, H_arr_int, H_dep_dom, H_dep_int 是长度为24的列表，表示每小时的总和
-# ARR_DOM_MAX, ARR_INT_MAX, DEP_DOM_MAX, DEP_INT_MAX 对应各分类的动态小时最大值
-# ARR_MAX, DEP_MAX, DOM_MAX, INT_MAX, TOT_MAX 是整合类别的动态小时最大值
-# ARR_LIMIT, DEP_LIMIT, TOT_LIMIT 是每五分钟的最大值，假设是标量或数组
-
 
 model = gp.Model('dynamic_schedule')
 
@@ -147,12 +146,25 @@ for t in range(num_periods):
     model.addConstr(arr_int[t] >= ref_arr_int[t], name="REF_ARR_INT")
     model.addConstr(dep_int[t] >= ref_dep_int[t], name="REF_DEP_INT")
 
-# 🆕 整数规划参数调优
-model.Params.IntegralityFocus = 1  # 强调整数可行性
+# 约束6：进出港15分钟上限值 （进出港15分钟上限值均为28，双向为45）
+for i in range(num_periods - 2):
+    current_window = [i, i + 1, i + 2]
+
+    # 进港总量 = 到达国内 + 到达国际
+    arr_total = gp.quicksum(arr_dom[t] + arr_int[t] for t in current_window)
+    # 出港总量 = 出发国内 + 出发国际
+    dep_total = gp.quicksum(dep_dom[t] + dep_int[t] for t in current_window)
+    # 双向总流量
+    total = arr_total + dep_total
+
+    model.addConstr(arr_total <= 28, name=f"arr_15min_{i}")
+    model.addConstr(dep_total <= 28, name=f"dep_15min_{i}")
+    model.addConstr(total <= 45, name=f"total_15min_{i}")
 
 # model.Params.MIPGap = 0.1  # shape允许间隙
-model.Params.MIPGap = 0.99  # smooth允许间隙
-
+# model.Params.MIPGap = 0.99  # smooth允许间隙
+# 🆕 整数规划参数调优
+model.Params.IntegralityFocus = 1  # 强调整数可行性
 model.Params.Heuristics = 1  # 增加启发式搜索
 model.Params.Presolve = 1  # 基础预处理
 
@@ -173,32 +185,33 @@ model.Params.Presolve = 1  # 基础预处理
 #     shape_obj += weight * (total_dep - ref_dep[t]) ** 2
 
 # === 平滑扰动优化目标 ===
-np.random.seed(42)  # 可设置的随机种子
-noise_weights = np.random.uniform(0.5, 1.5, size=(4, 287))  # 4个变量类型，287个间隔
-smooth_obj = gp.QuadExpr()
-arr_total = {t: arr_dom[t] + arr_int[t] for t in range(288)}
-dep_total = {t: dep_dom[t] + dep_int[t] for t in range(288)}
-
-for var_idx, var_list in enumerate([arr_total, dep_total]):
-    for t in range(287):
-        diff = var_list[t + 1] - var_list[t]
-        # 核心修改：波动项权重引入随机性
-        weight = noise_weights[var_idx, t]
-        smooth_obj += weight * (diff * diff)  # 随机权重影响波动幅度
-max_delta = 3  # 允许相邻时段最大变化量
-for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
-    for t in range(287):
-        model.addConstr(var_list[t + 1] - var_list[t] <= max_delta, name="max")
-        model.addConstr(var_list[t + 1] - var_list[t] >= -max_delta, name="min")
-
-for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
-    for t in range(287):
-        diff = var_list[t + 1] - var_list[t]
-        smooth_obj += diff * diff  # 仍使用二次项
+# np.random.seed(42)  # 可设置的随机种子
+# noise_weights = np.random.uniform(0.5, 1.5, size=(4, 287))  # 4个变量类型，287个间隔
+# smooth_obj = gp.QuadExpr()
+# arr_total = {t: arr_dom[t] + arr_int[t] for t in range(288)}
+# dep_total = {t: dep_dom[t] + dep_int[t] for t in range(288)}
+#
+# for var_idx, var_list in enumerate([arr_total, dep_total]):
+#     for t in range(287):
+#         diff = var_list[t + 1] - var_list[t]
+#         # 核心修改：波动项权重引入随机性
+#         weight = noise_weights[var_idx, t]
+#         smooth_obj += weight * (diff * diff)  # 随机权重影响波动幅度
+# max_delta = 3  # 允许相邻时段最大变化量
+# for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
+#     for t in range(287):
+#         model.addConstr(var_list[t + 1] - var_list[t] <= max_delta, name="max")
+#         model.addConstr(var_list[t + 1] - var_list[t] >= -max_delta, name="min")
+#
+# for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
+#     for t in range(287):
+#         diff = var_list[t + 1] - var_list[t]
+#         smooth_obj += diff * diff  # 仍使用二次项
+#
+# model.setObjective(smooth_obj, GRB.MINIMIZE)
 
 # === 随机生成优化目标 ===
-
-model.setObjective(smooth_obj, GRB.MINIMIZE)
+model.Params.Seed = random.randint(0, 1000)
 
 # 求解模型
 model.optimize()
