@@ -161,14 +161,13 @@ for i in range(num_periods - 2):
     model.addConstr(dep_total <= 28, name=f"dep_15min_{i}")
     model.addConstr(total <= 45, name=f"total_15min_{i}")
 
-# model.Params.MIPGap = 0.1  # shape允许间隙
-# model.Params.MIPGap = 0.99  # smooth允许间隙
 # 🆕 整数规划参数调优
 model.Params.IntegralityFocus = 1  # 强调整数可行性
 model.Params.Heuristics = 1  # 增加启发式搜索
 model.Params.Presolve = 1  # 基础预处理
 
 # === 波形优化目标 ===
+# model.Params.MIPGap = 0.1  # shape允许间隙
 # shape_obj = gp.QuadExpr()
 # for t in range(num_periods):
 #     # 计算总ARR和DEP
@@ -185,6 +184,7 @@ model.Params.Presolve = 1  # 基础预处理
 #     shape_obj += weight * (total_dep - ref_dep[t]) ** 2
 
 # === 平滑扰动优化目标 ===
+# model.Params.MIPGap = 0.99  # smooth允许间隙
 # np.random.seed(42)  # 可设置的随机种子
 # noise_weights = np.random.uniform(0.5, 1.5, size=(4, 287))  # 4个变量类型，287个间隔
 # smooth_obj = gp.QuadExpr()
