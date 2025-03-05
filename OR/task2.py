@@ -25,10 +25,12 @@ min_times = {
 arr_df = pd.read_excel('pre_task2.xlsx', sheet_name='到达航班')
 dep_df = pd.read_excel('pre_task2.xlsx', sheet_name='出发航班')
 
+
 # 预处理函数：将时间字符串转换为分钟数
 def time_to_minutes(t_str):
     h, m = map(int, t_str.split(':'))
     return h * 60 + m
+
 
 # 解析到达和出发航班数据
 arr_flights = []
@@ -58,17 +60,25 @@ model = Model('Flight_Pairing')
 variables = {}
 for i, arr in enumerate(arr_flights):
     for j, dep in enumerate(dep_flights):
-        # 仅当市场和日期相同时才可能配对
-        if arr['market'] == dep['market'] and arr['date'] == dep['date']:
-            delta = dep['time'] - arr['time']
-            # 排除负时间差（假设无跨天）
+        # 允许日期为1的到达与日期为2的出发配对
+        if arr['market'] == dep['market'] and (
+                (arr['date'] == dep['date']) or  # 同日期配对
+                (arr['date'] == 1 and dep['date'] == 2)  # 跨日期配对
+        ):
+            # 计算实际过站时间（处理跨天情况）
+            if arr['date'] == dep['date']:
+                delta = dep['time'] - arr['time']
+            else:  # 日期1到达 + 日期2出发
+                delta = (24 * 60 - arr['time']) + dep['time']
+
+            # 排除无效时间差（即使跨天也要保证delta>0）
             if delta <= 0:
                 continue
+
             market = arr['market']
             # 检查所有可能的机型
             for k in ['C', 'E', 'F']:
                 if (market, k) in min_times and delta >= min_times[(market, k)]:
-                    # 检查配额是否可能允许（仅生成有意义的变量）
                     if quotas[(market, k)]['ARR'] > 0 and quotas[(market, k)]['DEP'] > 0:
                         variables[(i, j, k)] = model.addVar(vtype=GRB.BINARY, name=f'x_{i}_{j}_{k}')
 
@@ -104,9 +114,9 @@ for (market, k), quota in quotas.items():
         # 正确解包元组的三个元素
         i, j, key_k = key
         # 过滤当前市场机型
-        if key_k == k and arr_flights[i]['market'] == market:
+        if key_k == k and arr_flights[i]['market'] == market and arr_flights[i]['date'] == 2:
             arr_total.append(variables[key])
-        if key_k == k and dep_flights[j]['market'] == market:
+        if key_k == k and dep_flights[j]['market'] == market and dep_flights[j]['date'] == 2:
             dep_total.append(variables[key])
     if arr_total:
         model.addConstr(quicksum(arr_total) <= quota['ARR'], f'arr_quota_{market}_{k}')
@@ -114,6 +124,28 @@ for (market, k), quota in quotas.items():
         model.addConstr(quicksum(dep_total) <= quota['DEP'], f'dep_quota_{market}_{k}')
 
 model.optimize()
+
+# 约束4：
+date1_arr_indices = [i for i, arr in enumerate(arr_flights) if arr['date'] == 1]
+
+# 为每个日期1的到达航班创建必须配对的约束
+for i in date1_arr_indices:
+    # 找到该航班所有可能的配对变量
+    possible_pairs = [
+        var for (arr_idx, dep_idx, k), var in variables.items()
+        if arr_idx == i  # 匹配当前到达航班
+           and dep_flights[dep_idx]['date'] == 2  # 确保是第二天的出发
+    ]
+
+    if not possible_pairs:
+        raise ValueError(f"日期1的到达航班{i}没有可用的出发航班配对，请检查数据")
+
+    # 添加必须配对的约束
+    model.addConstr(
+        quicksum(possible_pairs) == 1,
+        name=f"mandatory_pairing_date1_arr_{i}"
+    )
+
 
 # 收集配对结果
 pair_id = 1
