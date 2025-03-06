@@ -125,7 +125,7 @@ for (market, k), quota in quotas.items():
 
 model.optimize()
 
-# 约束4：
+# 约束4：日期1的到达航班必须全部配对
 date1_arr_indices = [i for i, arr in enumerate(arr_flights) if arr['date'] == 1]
 
 # 为每个日期1的到达航班创建必须配对的约束
@@ -146,6 +146,29 @@ for i in date1_arr_indices:
         name=f"mandatory_pairing_date1_arr_{i}"
     )
 
+
+# 约束5：日期2的所有出发航班必须配对
+date2_dep_indices = [j for j, dep in enumerate(dep_flights) if dep['date'] == 2]
+
+for j in date2_dep_indices:
+    # 找到该出发航班所有可能的配对变量
+    possible_pairs = [
+        var for (arr_idx, dep_idx, k), var in variables.items()
+        if dep_idx == j  # 匹配当前出发航班
+           and (
+                   (arr_flights[arr_idx]['date'] == 2) or  # 同日期配对
+                   (arr_flights[arr_idx]['date'] == 1)     # 跨日期配对
+           )
+    ]
+
+    if not possible_pairs:
+        raise ValueError(f"日期2的出发航班{j}没有可用的到达航班配对，请检查数据")
+
+    # 添加必须配对的约束
+    model.addConstr(
+        quicksum(possible_pairs) == 1,
+        name=f"mandatory_pairing_date2_dep_{j}"
+    )
 
 # 收集配对结果
 pair_id = 1
