@@ -1,4 +1,5 @@
 import pandas as pd
+from collections import defaultdict
 from gurobipy import Model, GRB, quicksum
 
 # 机型和市场配额约束（日期均为2）
@@ -21,6 +22,13 @@ min_times = {
     ('INT', 'F'): 55
 }
 
+# 定义小时分布限制数据 (hour DOM_DEP INT_DEP)
+dep_hour_distribution = [
+    (0, 0, 1), (1, 0, 8), (2, 0, 2), (3, 0, 2), (4, 0, 1), (5, 0, 1),
+    (6, 3, 0), (7, 6, 1), (8, 8, 2), (9, 4, 6), (10, 4, 2), (11, 6, 0),
+    (12, 6, 1), (13, 6, 5), (14, 2, 3), (15, 6, 3), (16, 5, 6), (17, 8, 4),
+    (18, 3, 4), (19, 5, 1), (20, 8, 2), (21, 3, 1), (22, 3, 1), (23, 1, 5)
+]
 # 读取Excel文件中的到达和出发航班数据
 arr_df = pd.read_excel('pre_task2.xlsx', sheet_name='到达航班')
 dep_df = pd.read_excel('pre_task2.xlsx', sheet_name='出发航班')
@@ -167,6 +175,31 @@ for j in date2_dep_indices:
         quicksum(possible_pairs) == 1,
         name=f"mandatory_pairing_date2_dep_{j}"
     )
+
+# 约束6：宽体机型在第二天的离港小时分布限制
+# 创建小时限制字典
+hour_limits = {}
+for h, dom_dep, int_dep in dep_hour_distribution:
+    hour_limits[(h, 'DOM')] = dom_dep
+    hour_limits[(h, 'INT')] = int_dep
+
+# 按小时和市场分组宽体机型离港变量
+hourly_dep_vars = defaultdict(list)
+for (i, j, k), var in variables.items():
+    # 仅处理宽体机型且日期为2的出发航班
+    if k in ['E', 'F'] and dep_flights[j]['date'] == 2:
+        dep_time = dep_flights[j]['time']
+        dep_hour = dep_time // 60  # 转换为小时
+        market = dep_flights[j]['market']
+        hourly_dep_vars[(dep_hour, market)].append(var)
+
+# 添加小时分布约束
+for (h, market), vars_list in hourly_dep_vars.items():
+    if (h, market) in hour_limits:
+        model.addConstr(
+            quicksum(vars_list) <= hour_limits[(h, market)],
+            name=f"hourly_limit_{market}_h{h}"
+        )
 
 model.optimize()
 
