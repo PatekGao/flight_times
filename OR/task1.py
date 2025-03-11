@@ -1,5 +1,5 @@
 import random
-
+import numpy as np
 import gurobipy as gp
 import pandas as pd
 from gurobipy import GRB
@@ -184,35 +184,35 @@ model.Params.Presolve = 1  # 基础预处理
 #     shape_obj += weight * (total_dep - ref_dep[t]) ** 2
 
 # === 平滑扰动优化目标 ===
-# model.Params.MIPGap = 0.99  # smooth允许间隙
-# np.random.seed(42)  # 可设置的随机种子
-# noise_weights = np.random.uniform(0.5, 1.5, size=(4, 287))  # 4个变量类型，287个间隔
-# smooth_obj = gp.QuadExpr()
-# arr_total = {t: arr_dom[t] + arr_int[t] for t in range(288)}
-# dep_total = {t: dep_dom[t] + dep_int[t] for t in range(288)}
-#
-# for var_idx, var_list in enumerate([arr_total, dep_total]):
-#     for t in range(287):
-#         diff = var_list[t + 1] - var_list[t]
-#         # 核心修改：波动项权重引入随机性
-#         weight = noise_weights[var_idx, t]
-#         smooth_obj += weight * (diff * diff)  # 随机权重影响波动幅度
-# max_delta = 3  # 允许相邻时段最大变化量
-# for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
-#     for t in range(287):
-#         model.addConstr(var_list[t + 1] - var_list[t] <= max_delta, name="max")
-#         model.addConstr(var_list[t + 1] - var_list[t] >= -max_delta, name="min")
-#
-# for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
-#     for t in range(287):
-#         diff = var_list[t + 1] - var_list[t]
-#         smooth_obj += diff * diff  # 仍使用二次项
-#
-# model.setObjective(smooth_obj, GRB.MINIMIZE)
+model.Params.MIPGap = 0.99  # smooth允许间隙
+np.random.seed(42)  # 可设置的随机种子
+noise_weights = np.random.uniform(0.5, 1.5, size=(4, 287))  # 4个变量类型，287个间隔
+smooth_obj = gp.QuadExpr()
+arr_total = {t: arr_dom[t] + arr_int[t] for t in range(288)}
+dep_total = {t: dep_dom[t] + dep_int[t] for t in range(288)}
+
+for var_idx, var_list in enumerate([arr_total, dep_total]):
+    for t in range(287):
+        diff = var_list[t + 1] - var_list[t]
+        # 核心修改：波动项权重引入随机性
+        weight = noise_weights[var_idx, t]
+        smooth_obj += weight * (diff * diff)  # 随机权重影响波动幅度
+max_delta = 3  # 允许相邻时段最大变化量
+for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
+    for t in range(287):
+        model.addConstr(var_list[t + 1] - var_list[t] <= max_delta, name="max")
+        model.addConstr(var_list[t + 1] - var_list[t] >= -max_delta, name="min")
+
+for var_list in [arr_dom, arr_int, dep_dom, dep_int]:
+    for t in range(287):
+        diff = var_list[t + 1] - var_list[t]
+        smooth_obj += diff * diff  # 仍使用二次项
+
+model.setObjective(smooth_obj, GRB.MINIMIZE)
 
 
 # === 随机生成优化目标 ===
-model.Params.Seed = random.randint(0, 1000)
+# model.Params.Seed = random.randint(0, 1000)
 
 # 求解模型
 model.optimize()

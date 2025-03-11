@@ -123,12 +123,10 @@ for (market, k), quota in quotas.items():
     if dep_total:
         model.addConstr(quicksum(dep_total) <= quota['DEP'], f'dep_quota_{market}_{k}')
 
-model.optimize()
 
 # 约束4：日期1的到达航班必须全部配对
 date1_arr_indices = [i for i, arr in enumerate(arr_flights) if arr['date'] == 1]
 
-# 为每个日期1的到达航班创建必须配对的约束
 for i in date1_arr_indices:
     # 找到该航班所有可能的配对变量
     possible_pairs = [
@@ -169,6 +167,8 @@ for j in date2_dep_indices:
         quicksum(possible_pairs) == 1,
         name=f"mandatory_pairing_date2_dep_{j}"
     )
+
+model.optimize()
 
 # 收集配对结果
 pair_id = 1
