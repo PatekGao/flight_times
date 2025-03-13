@@ -29,6 +29,69 @@ dep_hour_distribution = [
     (12, 6, 1), (13, 6, 5), (14, 2, 3), (15, 6, 3), (16, 5, 6), (17, 8, 4),
     (18, 3, 4), (19, 5, 1), (20, 8, 2), (21, 3, 1), (22, 3, 1), (23, 1, 5)
 ]
+
+peak_configs = [
+    # 国内双向
+    {
+        'name': '国内双向',
+        'market': 'DOM',
+        'direction': 'both',
+        'start_time': '13:20',
+        'end_time': '14:15',
+        'total': 119,
+        'ratios': {'C': 0.88, 'E': 0.12, 'F': 0}
+    },
+    # 国内进港
+    {
+        'name': '国内进港',
+        'market': 'DOM',
+        'direction': 'ARR',
+        'start_time': '13:30',
+        'end_time': '14:25',
+        'total': 71,
+        'ratios': {'C': 0.88, 'E': 0.12, 'F': 0}
+    },
+    # 国内离港
+    {
+        'name': '国内离港',
+        'market': 'DOM',
+        'direction': 'DEP',
+        'start_time': '07:35',
+        'end_time': '08:30',
+        'total': 77,
+        'ratios': {'C': 0.88, 'E': 0.12, 'F': 0}
+    },
+    # 国际双向
+    {
+        'name': '国际双向',
+        'market': 'INT',
+        'direction': 'both',
+        'start_time': '01:50',
+        'end_time': '02:45',
+        'total': 26,
+        'ratios': {'C': 0.40, 'E': 0.60, 'F': 0}
+    },
+    # 国际进港
+    {
+        'name': '国际进港',
+        'market': 'INT',
+        'direction': 'ARR',
+        'start_time': '22:25',
+        'end_time': '23:20',
+        'total': 16,
+        'ratios': {'C': 0.395, 'E': 0.555, 'F': 0.05}
+    },
+    # 国际离港
+    {
+        'name': '国际离港',
+        'market': 'INT',
+        'direction': 'DEP',
+        'start_time': '09:05',
+        'end_time': '10:00',
+        'total': 18,
+        'ratios': {'C': 0.395, 'E': 0.555, 'F': 0.05}
+    }
+]
 # 读取Excel文件中的到达和出发航班数据
 arr_df = pd.read_excel('pre_task2.xlsx', sheet_name='到达航班')
 dep_df = pd.read_excel('pre_task2.xlsx', sheet_name='出发航班')
@@ -200,6 +263,89 @@ for (h, market), vars_list in hourly_dep_vars.items():
             quicksum(vars_list) <= hour_limits[(h, market)],
             name=f"hourly_limit_{market}_h{h}"
         )
+
+# 约束7：国内国际高峰小时机型比例约束
+for config in peak_configs:
+    # 转换时间到分钟
+    start_h, start_m = map(int, config['start_time'].split(':'))
+    end_h, end_m = map(int, config['end_time'].split(':'))
+    start_min = start_h * 60 + start_m
+    end_min = end_h * 60 + end_m
+
+    # 计算机型配额
+    ratios = config['ratios']
+    e_count = round(config['total'] * ratios.get('E', 0))
+    f_count = round(config['total'] * ratios.get('F', 0))
+    c_count = config['total'] - e_count - f_count
+
+    # 收集变量
+    c_vars = []
+    e_vars = []
+    f_vars = []
+
+    # 根据方向筛选航班
+    direction = config['direction']
+    market = config['market']
+
+    if direction == 'ARR':
+        # 到达航班筛选
+        selected = [
+            i for i, arr in enumerate(arr_flights)
+            if arr['market'] == market
+               and arr['date'] == 2
+               and start_min <= arr['time'] <= end_min
+        ]
+        # 收集到达航班对应的机型变量
+        for (i, j, k), var in variables.items():
+            if i in selected:
+                if k == 'C': c_vars.append(var)
+                elif k == 'E': e_vars.append(var)
+                elif k == 'F': f_vars.append(var)
+
+    elif direction == 'DEP':
+        # 出发航班筛选
+        selected = [
+            j for j, dep in enumerate(dep_flights)
+            if dep['market'] == market
+               and dep['date'] == 2
+               and start_min <= dep['time'] <= end_min
+        ]
+        # 收集出发航班对应的机型变量
+        for (i, j, k), var in variables.items():
+            if j in selected:
+                if k == 'C': c_vars.append(var)
+                elif k == 'E': e_vars.append(var)
+                elif k == 'F': f_vars.append(var)
+
+    elif direction == 'both':
+        # 双向筛选（同时考虑到达和出发）
+        selected_arr = [
+            i for i, arr in enumerate(arr_flights)
+            if arr['market'] == market
+               and arr['date'] == 2
+               and start_min <= arr['time'] <= end_min
+        ]
+        selected_dep = [
+            j for j, dep in enumerate(dep_flights)
+            if dep['market'] == market
+               and dep['date'] == 2
+               and start_min <= dep['time'] <= end_min
+        ]
+        # 收集双向变量
+        for (i, j, k), var in variables.items():
+            if i in selected_arr or j in selected_dep:
+                if k == 'C': c_vars.append(var)
+                elif k == 'E': e_vars.append(var)
+                elif k == 'F': f_vars.append(var)
+
+    # 添加约束
+    if c_count >= 0 and c_vars:
+        model.addConstr(quicksum(c_vars) <= c_count, name=f"peak_{config['name']}_C")
+    if e_count >= 0 and e_vars:
+        model.addConstr(quicksum(e_vars) <= e_count, name=f"peak_{config['name']}_E")
+    if f_count >= 0 and f_vars:
+        model.addConstr(quicksum(f_vars) <= f_count, name=f"peak_{config['name']}_F")
+
 
 model.optimize()
 
