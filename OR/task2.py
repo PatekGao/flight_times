@@ -259,10 +259,23 @@ for (i, j, k), var in variables.items():
 # 添加小时分布约束
 for (h, market), vars_list in hourly_dep_vars.items():
     if (h, market) in hour_limits:
+        original = hour_limits[(h, market)]
+        # 计算允许的上下限
+        upper_bound = original + 3
+        lower_bound = max(0, original - 3)  # 保证下限不低于0
+
+        # 添加柔性约束
         model.addConstr(
-            quicksum(vars_list) <= hour_limits[(h, market)],
-            name=f"hourly_limit_{market}_h{h}"
+            quicksum(vars_list) <= upper_bound,
+            name=f"flex_hourly_upper_{market}_h{h}"
         )
+        # 仅当原限制>0时添加下限约束
+        if original > 0:
+            model.addConstr(
+                quicksum(vars_list) >= lower_bound,
+                name=f"flex_hourly_lower_{market}_h{h}"
+            )
+
 
 # 约束7：国内国际高峰小时机型比例约束
 for config in peak_configs:
