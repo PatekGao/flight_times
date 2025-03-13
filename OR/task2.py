@@ -92,6 +92,7 @@ peak_configs = [
         'ratios': {'C': 0.395, 'E': 0.555, 'F': 0.05}
     }
 ]
+
 # 读取Excel文件中的到达和出发航班数据
 arr_df = pd.read_excel('pre_task2.xlsx', sheet_name='到达航班')
 dep_df = pd.read_excel('pre_task2.xlsx', sheet_name='出发航班')
@@ -129,29 +130,72 @@ model = Model('Flight_Pairing')
 
 # 生成变量：x[(i, j, k)]表示到达航班i与出发航班j配对且机型为k
 variables = {}
+mixed_market_vars = []  # 存储混接配对变量
 for i, arr in enumerate(arr_flights):
     for j, dep in enumerate(dep_flights):
-        # 允许日期为1的到达与日期为2的出发配对
+        # 新的配对条件判断
+        valid_pair = False
+        # 条件1：原有同市场配对
         if arr['market'] == dep['market'] and (
-                (arr['date'] == dep['date']) or  # 同日期配对
-                (arr['date'] == 1 and dep['date'] == 2)  # 跨日期配对
+                (arr['date'] == dep['date']) or
+                (arr['date'] == 1 and dep['date'] == 2)
         ):
-            # 计算实际过站时间（处理跨天情况）
-            if arr['date'] == dep['date']:
-                delta = dep['time'] - arr['time']
-            else:  # 日期1到达 + 日期2出发
-                delta = (24 * 60 - arr['time']) + dep['time']
+            valid_pair = True
+        # 条件2：混接配对（日期均为2）
+        elif arr['date'] == 2 and dep['date'] == 2:
+            valid_pair = True
 
-            # 排除无效时间差（即使跨天也要保证delta>0）
+        if not valid_pair:
+            continue
+
+        # 统一计算过站时间（处理所有可能的跨天情况）
+        if arr['date'] == dep['date']:
+            delta = dep['time'] - arr['time']
             if delta <= 0:
+                delta += 24 * 60  # 处理当天跨夜情况
+        else:
+            delta = (24 * 60 - arr['time']) + dep['time']
+
+        if delta <= 0:
+            continue
+
+        # 确定适用的市场和机型要求
+        if arr['market'] == dep['market']:  # 同市场
+            market = arr['market']
+            min_time_config = min_times.get((market, 'C'), 0)  # 默认C类
+        else:  # 混接市场
+            market_arr = arr['market']
+            market_dep = dep['market']
+            # 取两个市场机型要求的最大值
+            min_time_config = max(
+                min_times.get((market_arr, 'C'), 0),
+                min_times.get((market_dep, 'C'), 0)
+            )
+
+        # 生成机型变量
+        for k in ['C', 'E', 'F']:
+            # 混接时使用最大过站时间要求
+            if arr['market'] != dep['market']:
+                min_time_needed = max(
+                    min_times.get((arr['market'], k), 0),
+                    min_times.get((dep['market'], k), 0)
+                )
+            else:
+                min_time_needed = min_times.get((arr['market'], k), 0)
+
+            if delta < min_time_needed:
                 continue
 
-            market = arr['market']
-            # 检查所有可能的机型
-            for k in ['C', 'E', 'F']:
-                if (market, k) in min_times and delta >= min_times[(market, k)]:
-                    if quotas[(market, k)]['ARR'] > 0 and quotas[(market, k)]['DEP'] > 0:
-                        variables[(i, j, k)] = model.addVar(vtype=GRB.BINARY, name=f'x_{i}_{j}_{k}')
+            # 配额检查
+            arr_quota = quotas.get((arr['market'], k), {}).get('ARR', 0)
+            dep_quota = quotas.get((dep['market'], k), {}).get('DEP', 0)
+
+            if arr_quota > 0 and dep_quota > 0:
+                var = model.addVar(vtype=GRB.BINARY, name=f'x_{i}_{j}_{k}')
+                variables[(i, j, k)] = var
+                # 记录混接配对
+                if arr['market'] != dep['market']:
+                    mixed_market_vars.append(var)
 
 # 目标函数：最大化配对总数
 model.setObjective(quicksum(variables.values()), GRB.MAXIMIZE)
@@ -359,6 +403,13 @@ for config in peak_configs:
     if f_count >= 0 and f_vars:
         model.addConstr(quicksum(f_vars) <= f_count, name=f"peak_{config['name']}_F")
 
+# 约束8：国内国际混接比例：5% （仅讨论第二天天内）
+if mixed_market_vars:
+    total_pairs = quicksum(variables.values())
+    model.addConstr(
+        quicksum(mixed_market_vars) <= 0.05 * total_pairs,
+        name="mixed_market_limit"
+    )
 
 model.optimize()
 
