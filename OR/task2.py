@@ -1,5 +1,6 @@
-import pandas as pd
 from collections import defaultdict
+
+import pandas as pd
 from gurobipy import Model, GRB, quicksum
 
 # 机型和市场配额约束（日期均为2）
@@ -149,15 +150,14 @@ for i, arr in enumerate(arr_flights):
             continue
 
         # 统一计算过站时间（处理所有可能的跨天情况）
-        if arr['date'] == dep['date']:
+        delta = 0
+        if arr['date'] == 2 and dep['date'] == 2:
             delta = dep['time'] - arr['time']
             if delta <= 0:
-                delta += 24 * 60  # 处理当天跨夜情况
-        else:
+                continue
+        elif arr['date'] == 1 and dep['date'] == 2:
             delta = (24 * 60 - arr['time']) + dep['time']
 
-        if delta <= 0:
-            continue
 
         # 确定适用的市场和机型要求
         if arr['market'] == dep['market']:  # 同市场
@@ -174,15 +174,7 @@ for i, arr in enumerate(arr_flights):
 
         # 生成机型变量
         for k in ['C', 'E', 'F']:
-            # 混接时使用最大过站时间要求
-            if arr['market'] != dep['market']:
-                min_time_needed = max(
-                    min_times.get((arr['market'], k), 0),
-                    min_times.get((dep['market'], k), 0)
-                )
-            else:
-                min_time_needed = min_times.get((arr['market'], k), 0)
-
+            min_time_needed = min_times.get((arr['market'], k), 0)
             if delta < min_time_needed:
                 continue
 
@@ -238,7 +230,6 @@ for (market, k), quota in quotas.items():
     if dep_total:
         model.addConstr(quicksum(dep_total) <= quota['DEP'], f'dep_quota_{market}_{k}')
 
-
 # 约束4：日期1的到达航班必须全部配对
 date1_arr_indices = [i for i, arr in enumerate(arr_flights) if arr['date'] == 1]
 
@@ -259,7 +250,6 @@ for i in date1_arr_indices:
         name=f"mandatory_pairing_date1_arr_{i}"
     )
 
-
 # 约束5：日期2的所有出发航班必须配对
 date2_dep_indices = [j for j, dep in enumerate(dep_flights) if dep['date'] == 2]
 
@@ -270,7 +260,7 @@ for j in date2_dep_indices:
         if dep_idx == j  # 匹配当前出发航班
            and (
                    (arr_flights[arr_idx]['date'] == 2) or  # 同日期配对
-                   (arr_flights[arr_idx]['date'] == 1)     # 跨日期配对
+                   (arr_flights[arr_idx]['date'] == 1)  # 跨日期配对
            )
     ]
 
@@ -305,8 +295,9 @@ for (h, market), vars_list in hourly_dep_vars.items():
     if (h, market) in hour_limits:
         original = hour_limits[(h, market)]
         # 计算允许的上下限
-        upper_bound = original + 3
-        lower_bound = max(0, original - 3)  # 保证下限不低于0
+        bias = 3
+        upper_bound = original + bias
+        lower_bound = max(0, original - bias)  # 保证下限不低于0
 
         # 添加柔性约束
         model.addConstr(
@@ -319,7 +310,6 @@ for (h, market), vars_list in hourly_dep_vars.items():
                 quicksum(vars_list) >= lower_bound,
                 name=f"flex_hourly_lower_{market}_h{h}"
             )
-
 
 # 约束7：国内国际高峰小时机型比例约束
 for config in peak_configs:
@@ -355,9 +345,12 @@ for config in peak_configs:
         # 收集到达航班对应的机型变量
         for (i, j, k), var in variables.items():
             if i in selected:
-                if k == 'C': c_vars.append(var)
-                elif k == 'E': e_vars.append(var)
-                elif k == 'F': f_vars.append(var)
+                if k == 'C':
+                    c_vars.append(var)
+                elif k == 'E':
+                    e_vars.append(var)
+                elif k == 'F':
+                    f_vars.append(var)
 
     elif direction == 'DEP':
         # 出发航班筛选
@@ -370,9 +363,12 @@ for config in peak_configs:
         # 收集出发航班对应的机型变量
         for (i, j, k), var in variables.items():
             if j in selected:
-                if k == 'C': c_vars.append(var)
-                elif k == 'E': e_vars.append(var)
-                elif k == 'F': f_vars.append(var)
+                if k == 'C':
+                    c_vars.append(var)
+                elif k == 'E':
+                    e_vars.append(var)
+                elif k == 'F':
+                    f_vars.append(var)
 
     elif direction == 'both':
         # 双向筛选（同时考虑到达和出发）
@@ -391,9 +387,12 @@ for config in peak_configs:
         # 收集双向变量
         for (i, j, k), var in variables.items():
             if i in selected_arr or j in selected_dep:
-                if k == 'C': c_vars.append(var)
-                elif k == 'E': e_vars.append(var)
-                elif k == 'F': f_vars.append(var)
+                if k == 'C':
+                    c_vars.append(var)
+                elif k == 'E':
+                    e_vars.append(var)
+                elif k == 'F':
+                    f_vars.append(var)
 
     # 添加约束
     if c_count >= 0 and c_vars:
