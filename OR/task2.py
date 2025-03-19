@@ -3,96 +3,7 @@ from collections import defaultdict
 import pandas as pd
 from gurobipy import Model, GRB, quicksum
 
-# 机型和市场配额约束（日期均为2）
-quotas = {
-    ('DOM', 'C'): {'ARR': 779, 'DEP': 779},
-    ('DOM', 'E'): {'ARR': 87, 'DEP': 87},
-    ('DOM', 'F'): {'ARR': 0, 'DEP': 0},
-    ('INT', 'C'): {'ARR': 116, 'DEP': 115},
-    ('INT', 'E'): {'ARR': 61, 'DEP': 61},
-    ('INT', 'F'): {'ARR': 1, 'DEP': 1}
-}
-
-# 最短过站时间（分钟）
-min_times = {
-    ('DOM', 'C'): 35,
-    ('DOM', 'E'): 50,
-    ('DOM', 'F'): 50,
-    ('INT', 'C'): 40,
-    ('INT', 'E'): 55,
-    ('INT', 'F'): 55
-}
-
-# 定义小时分布限制数据 (hour DOM_DEP INT_DEP)
-dep_hour_distribution = [
-    (0, 0, 1), (1, 0, 8), (2, 0, 2), (3, 0, 2), (4, 0, 1), (5, 0, 1),
-    (6, 3, 0), (7, 6, 1), (8, 8, 2), (9, 4, 6), (10, 4, 2), (11, 6, 0),
-    (12, 6, 1), (13, 6, 5), (14, 2, 3), (15, 6, 3), (16, 5, 6), (17, 8, 4),
-    (18, 3, 4), (19, 5, 1), (20, 8, 2), (21, 3, 1), (22, 3, 1), (23, 1, 5)
-]
-
-peak_configs = [
-    # 国内双向
-    {
-        'name': '国内双向',
-        'market': 'DOM',
-        'direction': 'both',
-        'start_time': '13:20',
-        'end_time': '14:15',
-        'total': 119,
-        'ratios': {'C': 0.88, 'E': 0.12, 'F': 0}
-    },
-    # 国内进港
-    {
-        'name': '国内进港',
-        'market': 'DOM',
-        'direction': 'ARR',
-        'start_time': '13:30',
-        'end_time': '14:25',
-        'total': 71,
-        'ratios': {'C': 0.88, 'E': 0.12, 'F': 0}
-    },
-    # 国内离港
-    {
-        'name': '国内离港',
-        'market': 'DOM',
-        'direction': 'DEP',
-        'start_time': '07:35',
-        'end_time': '08:30',
-        'total': 77,
-        'ratios': {'C': 0.88, 'E': 0.12, 'F': 0}
-    },
-    # 国际双向
-    {
-        'name': '国际双向',
-        'market': 'INT',
-        'direction': 'both',
-        'start_time': '01:50',
-        'end_time': '02:45',
-        'total': 26,
-        'ratios': {'C': 0.40, 'E': 0.60, 'F': 0}
-    },
-    # 国际进港
-    {
-        'name': '国际进港',
-        'market': 'INT',
-        'direction': 'ARR',
-        'start_time': '22:25',
-        'end_time': '23:20',
-        'total': 16,
-        'ratios': {'C': 0.395, 'E': 0.555, 'F': 0.05}
-    },
-    # 国际离港
-    {
-        'name': '国际离港',
-        'market': 'INT',
-        'direction': 'DEP',
-        'start_time': '09:05',
-        'end_time': '10:00',
-        'total': 18,
-        'ratios': {'C': 0.395, 'E': 0.555, 'F': 0.05}
-    }
-]
+from utils import quotas, min_times, dep_hour_distribution, peak_configs, DOM_INT_MIX_p
 
 # 读取Excel文件中的到达和出发航班数据
 arr_df = pd.read_excel('pre_task2.xlsx', sheet_name='到达航班')
@@ -157,7 +68,6 @@ for i, arr in enumerate(arr_flights):
                 continue
         elif arr['date'] == 1 and dep['date'] == 2:
             delta = (24 * 60 - arr['time']) + dep['time']
-
 
         # 确定适用的市场和机型要求
         if arr['market'] == dep['market']:  # 同市场
@@ -406,7 +316,7 @@ for config in peak_configs:
 if mixed_market_vars:
     total_pairs = quicksum(variables.values())
     model.addConstr(
-        quicksum(mixed_market_vars) <= 0.05 * total_pairs,
+        quicksum(mixed_market_vars) <= DOM_INT_MIX_p * total_pairs,
         name="mixed_market_limit"
     )
 

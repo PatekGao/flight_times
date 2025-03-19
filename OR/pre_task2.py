@@ -2,6 +2,55 @@ from datetime import timedelta, datetime
 
 import pandas as pd
 
+from utils import DOM_MIX_p, INT_MIX_p
+
+
+# 新增功能：统计第二天各类别高峰时段
+def find_peak_window(df, market, direction):
+    """找出指定市场和方向的高峰时段"""
+    df = df[(df['市场'] == market) & (df['日期'] == 2)]
+    time_counts = []
+
+    # 生成所有有效时间窗口
+    for start_time in pd.date_range("00:00", "23:59", freq="5T").time:
+        start_min = start_time.hour * 60 + start_time.minute
+        if start_min + 55 > 1439:  # 过滤跨日窗口
+            continue
+
+        # 计算时间窗口
+        start_str = start_time.strftime("%H:%M")
+        end_time = (datetime.combine(datetime.today(), start_time)
+                    + timedelta(minutes=55)).time().strftime("%H:%M")
+        window = f"{start_str}-{end_time}"
+
+        # 统计该窗口内的航班数
+        mask = df['时间'].between(start_str, end_time)
+        time_counts.append((window, mask.sum()))
+
+    # 找出最高峰窗口
+    return max(time_counts, key=lambda x: x[1]) if time_counts else ("N/A", 0)
+
+
+# 为每个类别计算高峰时段（使用向量化操作优化性能）
+def add_minutes_column(df):
+    """为DataFrame添加分钟数列"""
+    df = df.copy()
+    split_time = df['时间'].str.split(":", expand=True).astype(int)
+    df['minutes'] = split_time[0] * 60 + split_time[1]
+    return df
+
+
+# 定义统计函数
+def count_in_window(start_min, market, direction):
+    """统计指定时间窗口的航班数"""
+    end_min = start_min + 55
+    if direction == "ARR":
+        df = arr_df_day2[arr_df_day2['市场'] == market]
+    elif direction == "DEP":
+        df = dep_df_day2[dep_df_day2['市场'] == market]
+    return ((df['minutes'] >= start_min) & (df['minutes'] <= end_min)).sum()
+
+
 # 读取Excel文件
 # df = pd.read_excel('TFU_dynamic_sheet2040_rand_smooth_2-23_ZG.xlsx', dtype={'Time': str})
 df = pd.read_excel('task1_3-9.xlsx', dtype={'Time': str})
@@ -79,8 +128,8 @@ print(f"日期为2的0-10点出港航班数量: {dep_flights_2_0_10}")
 print(f"其中国际出港航班数量: {international_flights}")
 print(f"其中国内出港航班数量: {domestic_flights}")
 
-day1_int_flights = round(international_flights * 0.6)
-day1_dom_flights = round(domestic_flights * 0.6)
+day1_int_flights = round(international_flights * INT_MIX_p)
+day1_dom_flights = round(domestic_flights * DOM_MIX_p)
 print(f'第一天国际航班量：{day1_int_flights}')
 print(f'第一天国内航班量：{day1_dom_flights}')
 
@@ -91,57 +140,9 @@ late_flights['日期'] = 1
 
 arr_df = pd.concat([late_flights, arr_df]).reset_index(drop=True)
 
-
-# 新增功能：统计第二天各类别高峰时段
-def find_peak_window(df, market, direction):
-    """找出指定市场和方向的高峰时段"""
-    df = df[(df['市场'] == market) & (df['日期'] == 2)]
-    time_counts = []
-
-    # 生成所有有效时间窗口
-    for start_time in pd.date_range("00:00", "23:59", freq="5T").time:
-        start_min = start_time.hour * 60 + start_time.minute
-        if start_min + 55 > 1439:  # 过滤跨日窗口
-            continue
-
-        # 计算时间窗口
-        start_str = start_time.strftime("%H:%M")
-        end_time = (datetime.combine(datetime.today(), start_time)
-                    + timedelta(minutes=55)).time().strftime("%H:%M")
-        window = f"{start_str}-{end_time}"
-
-        # 统计该窗口内的航班数
-        mask = df['时间'].between(start_str, end_time)
-        time_counts.append((window, mask.sum()))
-
-    # 找出最高峰窗口
-    return max(time_counts, key=lambda x: x[1]) if time_counts else ("N/A", 0)
-
-
-# 为每个类别计算高峰时段（使用向量化操作优化性能）
-def add_minutes_column(df):
-    """为DataFrame添加分钟数列"""
-    df = df.copy()
-    split_time = df['时间'].str.split(":", expand=True).astype(int)
-    df['minutes'] = split_time[0] * 60 + split_time[1]
-    return df
-
-
 # 预处理数据
 arr_df_day2 = add_minutes_column(arr_df[arr_df['日期'] == 2])
 dep_df_day2 = add_minutes_column(dep_df[dep_df['日期'] == 2])
-
-
-# 定义统计函数
-def count_in_window(start_min, market, direction):
-    """统计指定时间窗口的航班数"""
-    end_min = start_min + 55
-    if direction == "ARR":
-        df = arr_df_day2[arr_df_day2['市场'] == market]
-    elif direction == "DEP":
-        df = dep_df_day2[dep_df_day2['市场'] == market]
-    return ((df['minutes'] >= start_min) & (df['minutes'] <= end_min)).sum()
-
 
 # 主分析逻辑
 categories = {
