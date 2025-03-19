@@ -145,7 +145,7 @@ min_times = {
 }
 
 dep_hour_distribution = [(row[0], row[1], row[2]) for row in df2.iloc[37:61, 2:5].values]
-
+print("Finished reading! Now out of utils.")
 if __name__ == "__main__":
     # test
     print(ref_arr_dom)
