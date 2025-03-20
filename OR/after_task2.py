@@ -62,39 +62,15 @@ for i, arr in enumerate(arr_flights):
 
             arr_market = arr['market']
             dep_market = dep['market']
+            if arr_market == dep_market:
+                for k in ['C', 'E', 'F']:
+                    arr_quota = quotas.get((arr_market, k), {'ARR': 0})['ARR']
+                    min_time = min_times.get((arr_market, k), 0)
 
-            for k in ['C', 'E', 'F']:
-                arr_quota = quotas.get((arr_market, k), {'ARR': 0})['ARR']
-                min_time = max(
-                    min_times.get((arr_market, k), 0),
-                    min_times.get((dep_market, k), 0)
-                )
-
-                if delta >= min_time and arr_quota > 0:
-                    var = model.addVar(vtype=GRB.BINARY, name=f'x_{i}_{j}_{k}')
-                    variables[(i, j, k)] = var
-                    delta_dict[(i, j, k)] = delta  # 记录过站时间
-
-for i, arr in enumerate(arr_flights):
-    for j, dep in enumerate(dep_flights):
-        # 仅允许跨天配对（日期2到达 -> 日期3出发）
-        if arr['date'] == 2 and dep['date'] == 3:
-            # 计算过站时间（跨天）
-            delta = (24 * 60 - arr['time']) + dep['time']
-
-            # 获取市场信息
-            arr_market = arr['market']
-            dep_market = dep['market']
-
-            # 检查机型约束（仅约束到达航班的配额）
-            for k in ['C', 'E', 'F']:
-                # 检查到达航班的配额是否允许
-                arr_quota = quotas.get((arr_market, k), {'ARR': 0})['ARR']
-
-                min_time = min_times.get((arr_market, k), 0)
-
-                if delta >= min_time and arr_quota > 0:
-                    variables[(i, j, k)] = model.addVar(vtype=GRB.BINARY, name=f'x_{i}_{j}_{k}')
+                    if delta >= min_time and arr_quota > 0:
+                        var = model.addVar(vtype=GRB.BINARY, name=f'x_{i}_{j}_{k}')
+                        variables[(i, j, k)] = var
+                        delta_dict[(i, j, k)] = delta  # 记录过站时间
 
 # 目标函数：最大化 (M - delta) 的总和
 valid_pairs = [(key, var) for key, var in variables.items() if key in delta_dict]
@@ -133,7 +109,9 @@ for config in peak_configs:
     end_h, end_m = map(int, config['end_time'].split(':'))
     start_min = start_h * 60 + start_m
     end_min = end_h * 60 + end_m
-
+    target_arr = arr_df[(arr_df['ID'].notna()) & (arr_df['日期'] == 2)]
+    target_arr['分钟'] = target_arr['时间'].apply(time_to_minutes)
+    target_arr = target_arr[(target_arr['分钟'] >= start_min) & (target_arr['分钟'] <= end_min)]
     # 筛选到达航班
     selected = [
         i for i, arr in enumerate(arr_flights)
@@ -152,7 +130,7 @@ for config in peak_configs:
     total = config['total']
     for k in ['C', 'E', 'F']:
         if k in ratios and k_vars.get(k):
-            required = round(total * ratios[k])
+            required = round(total * ratios[k]) - len(target_arr[target_arr['机型'] == k])
             model.addConstr(quicksum(k_vars[k]) <= required + 1, f"ext_peak_{config['name']}_{k}")
 
 # 求解模型
