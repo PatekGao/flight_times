@@ -284,7 +284,6 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
 
     # 添加基于小时统计数据的约束和目标函数
     # 目标函数：最大化与小时统计数据的匹配度
-    obj_expr = gp.LinExpr()
 
     # 首先，计算当前分布的小时分布情况
     current_hour_distribution = {}
@@ -337,6 +336,41 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
     # 计算总航班数
     total_flights = day2_arrivals.shape[0]
 
+    # ========== 新增：多目标优化 ==========
+    # 第一目标：最小化各航司集团（除其它）未来波形与现状波形的差异
+    airline_wave_deviation = gp.LinExpr()
+    for airline, _ in all_airlines:
+        if airline == '其它':
+            continue
+        for hour in range(24):
+            # 现状
+            current_count = airline_hour_counts[
+                (airline_hour_counts['AirlineGroup'] == airline) &
+                (airline_hour_counts['小时'] == hour)
+            ]['count'].sum() if not airline_hour_counts[
+                (airline_hour_counts['AirlineGroup'] == airline) &
+                (airline_hour_counts['小时'] == hour)
+            ].empty else 0
+
+            # 未来
+            future_count_expr = gp.quicksum(
+                x[flight_id, airline, heading]
+                for i, flight in day2_arrivals.iterrows()
+                if flight['小时'] == hour
+                for heading, _ in all_headings
+                if (flight_id := flight['ID'], airline, heading) in x
+            )
+
+            # 绝对偏差
+            dev_var = model.addVar(lb=0, name=f"wave_dev_{airline}_{hour}")
+            model.addConstr(dev_var >= future_count_expr - current_count, f"wave_dev_pos_{airline}_{hour}")
+            model.addConstr(dev_var >= current_count - future_count_expr, f"wave_dev_neg_{airline}_{hour}")
+            dev_var = dev_var ** 2
+            airline_wave_deviation += dev_var
+
+    # 第二目标：原有目标函数
+    obj_expr = gp.LinExpr()
+
     # 计算未来分布与当前分布的偏离度
     for key in set(current_hour_distribution.keys()) | set(future_distribution.keys()):
         current_value = current_hour_distribution.get(key, 0)
@@ -362,7 +396,8 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
                 obj_expr += current_value * 100
 
     # 设置目标函数为最小化偏离度
-    model.setObjective(obj_expr, GRB.MINIMIZE)
+    # ========== 设置多目标 ==========
+    model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
 
     # 求解模型
     model.optimize()

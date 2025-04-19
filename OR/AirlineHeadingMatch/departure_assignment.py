@@ -321,7 +321,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
             # 添加约束：未来分布不低于现状
             if current_count > 0:
                 if market_type == 'DOM':
-                    bias = 5
+                    bias = 4
                 else:
                     bias = 2
                 model.addConstr(
@@ -350,9 +350,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
         # 添加约束：宽体机总数量必须等于配额
         if market_type == 'DOM':
-            bias = 0
+            bias = 2
         else:
-            bias = 1
+            bias = 2
         model.addConstr(
             assigned_wide_body_count + unassigned_wide_body_expr >= wide_body_quota - bias,
             f"wide_body_quota_{airline}_{market_type}_min_Departure"
@@ -364,6 +364,48 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
     # 添加基于小时统计数据的约束和目标函数
     # 目标函数：最小化未来分布与当前分布的偏离度
+
+    # ========== 新增：多目标优化 ==========
+    # 第一目标：最小化各航司集团（除其它）未来波形与现状波形的差异
+    airline_wave_deviation = gp.LinExpr()
+    for airline, _ in all_airlines:
+        if airline == '其它':
+            continue
+        for hour in range(24):
+            # 现状
+            current_count = airline_hour_counts[
+                (airline_hour_counts['AirlineGroup'] == airline) &
+                (airline_hour_counts['小时'] == hour)
+            ]['count'].sum() if not airline_hour_counts[
+                (airline_hour_counts['AirlineGroup'] == airline) &
+                (airline_hour_counts['小时'] == hour)
+            ].empty else 0
+
+            # 未来
+            assigned_count_expr = gp.quicksum(
+                y[flight_id, heading]
+                for i, flight in day2_departures.iterrows()
+                if flight['小时'] == hour and result_df.loc[i, '航司'] == airline
+                for heading, _ in all_headings
+                if (flight_id := flight['ID'], heading) in y
+            )
+            unassigned_count_expr = gp.quicksum(
+                y[flight_id, heading, airline]
+                for i, flight in day2_departures.iterrows()
+                if flight['小时'] == hour and not result_df.loc[i, '航司']
+                for heading, _ in all_headings
+                if (flight_id := flight['ID'], heading, airline) in y
+            )
+            future_count_expr = assigned_count_expr + unassigned_count_expr
+
+            # 绝对偏差
+            dev_var = model.addVar(lb=0, name=f"wave_dev_{airline}_{hour}")
+            model.addConstr(dev_var >= future_count_expr - current_count, f"wave_dev_pos_{airline}_{hour}")
+            model.addConstr(dev_var >= current_count - future_count_expr, f"wave_dev_neg_{airline}_{hour}")
+            dev_var = dev_var ** 2
+            airline_wave_deviation += dev_var
+
+    # 第二目标：原有目标函数
     obj_expr = gp.LinExpr()
 
     # 首先，计算当前分布的小时分布情况
@@ -477,6 +519,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
     # 计算总航班数
     total_flights = day2_departures.shape[0]
+
+    # ========== 设置多目标 ==========
+    model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
 
     # 计算未来分布与当前分布的偏离度
     for key in set(current_hour_distribution.keys()) | set(future_distribution.keys()):
