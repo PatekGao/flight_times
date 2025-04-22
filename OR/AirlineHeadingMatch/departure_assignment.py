@@ -93,6 +93,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
         flight_hour = flight['小时']
         flight_acft = flight['机型']
         flight_airline = result_df.loc[i, '航司']
+        is_wide_body = flight_acft in ['E', 'F']
 
         # 如果已经分配了航司
         if flight_airline:
@@ -109,6 +110,13 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                 # 2. 绝对远程航向分配宽体机
                 if market_type == 'INT' and heading_type == '绝对远程' and flight_acft not in ['E', 'F']:
                     continue
+
+                # 3. 特定航向不能有宽体机
+                if is_wide_body:
+                    if market_type == 'DOM' and heading == 'LUVEN':
+                        continue
+                    if market_type == 'INT' and heading == 'MUMGO':
+                        continue
 
                 y[flight_id, heading] = model.addVar(vtype=GRB.BINARY, name=f"y_{flight_id}_{heading}")
         # 如果未分配航司（进港航班日期为1的情况）
@@ -137,6 +145,12 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                     # 2. 绝对远程航向分配宽体机
                     if market_type == 'INT' and heading_type == '绝对远程' and flight_acft not in ['E', 'F']:
                         continue
+                    # 3. 特定航向不能有宽体机
+                    if is_wide_body:
+                        if market_type == 'DOM' and heading == 'LUVEN':
+                            continue
+                        if market_type == 'INT' and heading == 'MUMGO':
+                            continue
 
                     # 创建联合变量 w[i, a, h] = z[i, a] * y[i, h]
                     # 由于无法直接表示非线性约束，我们使用一个新变量和线性约束来表示
@@ -320,6 +334,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
             # 添加约束：未来分布不低于现状
             if current_count > 0:
+                # 波形偏移
                 if market_type == 'DOM':
                     bias = 4
                 else:
@@ -349,10 +364,11 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
         )
 
         # 添加约束：宽体机总数量必须等于配额
+        # 宽体偏移
         if market_type == 'DOM':
-            bias = 2
+            bias = 3
         else:
-            bias = 2
+            bias = 1
         model.addConstr(
             assigned_wide_body_count + unassigned_wide_body_expr >= wide_body_quota - bias,
             f"wide_body_quota_{airline}_{market_type}_min_Departure"
@@ -376,10 +392,10 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
             current_count = airline_hour_counts[
                 (airline_hour_counts['AirlineGroup'] == airline) &
                 (airline_hour_counts['小时'] == hour)
-            ]['count'].sum() if not airline_hour_counts[
+                ]['count'].sum() if not airline_hour_counts[
                 (airline_hour_counts['AirlineGroup'] == airline) &
                 (airline_hour_counts['小时'] == hour)
-            ].empty else 0
+                ].empty else 0
 
             # 未来
             assigned_count_expr = gp.quicksum(
@@ -521,7 +537,6 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
     total_flights = day2_departures.shape[0]
 
     # ========== 设置多目标 ==========
-    model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
 
     # 计算未来分布与当前分布的偏离度
     for key in set(current_hour_distribution.keys()) | set(future_distribution.keys()):
@@ -546,14 +561,17 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                 obj_expr += current_value * 100
 
     # 设置目标函数为最小化偏离度
-    model.setObjective(obj_expr, GRB.MINIMIZE)
+    model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
+    model.Params.MIPGap = 0.01  # 设置Gap为1%（相对间隙）
 
     # 求解模型
     model.optimize()
 
     # 检查模型是否找到了可行解
     if model.status == GRB.OPTIMAL:
+        print("-----------------------------------------------------------------------")
         print(f"{market_type}离港航班分配成功！")
+        print("-----------------------------------------------------------------------")
 
         # 将结果添加到航班数据中
         for i, flight in day2_departures.iterrows():
@@ -578,5 +596,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
         return result_df
     else:
         diagnose_infeasibility(model)
-        print(f"{market_type}进港航班分配失败！模型不可行。")
+        print("-----------------------------------------------------------------------")
+        print(f"{market_type}离港航班分配失败！模型不可行。")
+        print("-----------------------------------------------------------------------")
         return None

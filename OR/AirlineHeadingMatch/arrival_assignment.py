@@ -71,6 +71,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
         flight_id = flight['ID']
         flight_hour = flight['小时']
         flight_acft = flight['机型']
+        is_wide_body = flight_acft in ['E','F']
 
         for airline, base_type in all_airlines:
             for heading, heading_type in all_headings:
@@ -83,6 +84,13 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
                 # 2. 绝对远程航向分配宽体机
                 if market_type == 'INT' and heading_type == '绝对远程' and flight_acft not in ['E', 'F']:
                     continue
+
+                # 3. 特定航向不能有宽体机
+                if is_wide_body:
+                    if market_type == 'DOM' and heading == 'IGNAK':
+                        continue
+                    if market_type == 'INT' and heading == 'LADUP':
+                        continue
 
                 x[flight_id, airline, heading] = model.addVar(vtype=GRB.BINARY,
                                                               name=f"x_{flight_id}_{airline}_{heading}")
@@ -130,7 +138,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
 
     # 主航向比例约束：确保各航司的主航向比例不低于现状
     for airline, _ in all_airlines:
-        if airline  in ['海航集团', '其它']:
+        if airline in ['海航集团', '其它']:
             continue
 
         key = (airline, market_type, 'Arrival')
@@ -224,7 +232,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
 
     # 为每个航司和每个小时添加约束
     for airline, _ in all_airlines:
-        if airline  in ['海航集团', '其它']:
+        if airline in ['海航集团', '其它']:
             continue
 
         for hour in range(24):
@@ -347,10 +355,10 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
             current_count = airline_hour_counts[
                 (airline_hour_counts['AirlineGroup'] == airline) &
                 (airline_hour_counts['小时'] == hour)
-            ]['count'].sum() if not airline_hour_counts[
+                ]['count'].sum() if not airline_hour_counts[
                 (airline_hour_counts['AirlineGroup'] == airline) &
                 (airline_hour_counts['小时'] == hour)
-            ].empty else 0
+                ].empty else 0
 
             # 未来
             future_count_expr = gp.quicksum(
@@ -398,11 +406,13 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
     # 设置目标函数为最小化偏离度
     # ========== 设置多目标 ==========
     model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
-
+    if market_type == 'DOM':
+        model.Params.MIPGap = 0.014  # 设置Gap（相对间隙）
+    else:
+        model.Params.MIPGap = 0.07
     # 求解模型
     model.optimize()
     # 创建用于返回的离港航班分配数量字典
-
     dom_dep_counts = {}
     int_dep_counts = {}
     if model.status == gp.GRB.OPTIMAL:
@@ -417,8 +427,9 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
             dom_dep_counts[airline] = dom_expressions[airline].getValue()
         for airline in int_expressions:
             int_dep_counts[airline] = int_expressions[airline].getValue()
-
+        print("-----------------------------------------------------------------------")
         print(f"{market_type}进港航班分配成功！")
+        print("-----------------------------------------------------------------------")
 
         # 将结果添加到航班数据中
         result_df = day2_arrivals.copy()
@@ -436,5 +447,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
         return result_df, dom_dep_counts, int_dep_counts
     else:
         diagnose_infeasibility(model)
+        print("-----------------------------------------------------------------------")
         print(f"{market_type}进港航班分配失败！模型不可行。")
+        print("-----------------------------------------------------------------------")
         return None, {}, {}
