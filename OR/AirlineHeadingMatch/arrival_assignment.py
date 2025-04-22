@@ -4,7 +4,7 @@ from gurobipy import GRB
 
 from OR.AirlineHeadingMatch.utils import get_main_headings, get_hour_from_time, diagnose_infeasibility
 from dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_ARR, AIRLINES_WIDE
-
+from config import DOM_ARR_GAP,INT_ARR_GAP,DOM_ARR_WAVE_BIAS,INT_ARR_WAVE_BIAS,DOM_ARR_WIDE_BIAS,INT_ARR_WIDE_BIAS
 
 def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_dom_stats, hourly_int_stats,
                            departure_flights=None, prev_dom_dep_counts=None, prev_int_dep_counts=None):
@@ -257,9 +257,9 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
             # 添加约束：未来分布不低于现状
             if current_count > 0:
                 if market_type == 'DOM':
-                    bias = 0
+                    bias = DOM_ARR_WAVE_BIAS
                 else:
-                    bias = 0
+                    bias = INT_ARR_WAVE_BIAS
                 model.addConstr(
                     future_count_expr >= current_count - bias,
                     f"hourly_wave_{airline}_{hour}_{market_type}_Arrival"
@@ -280,7 +280,10 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
         )
 
         # 添加约束：宽体机数量必须等于配额
-        bias = 0
+        if market_type == 'DOM':
+            bias = DOM_ARR_WIDE_BIAS
+        else:
+            bias = INT_ARR_WIDE_BIAS
         model.addConstr(
             wide_body_expr >= wide_body_quota - bias ,
             f"wide_body_quota_{airline}_{market_type}_min_Arrival"
@@ -407,9 +410,9 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
     # ========== 设置多目标 ==========
     model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
     if market_type == 'DOM':
-        model.Params.MIPGap = 0.014  # 设置Gap（相对间隙）
+        model.Params.MIPGap = DOM_ARR_GAP  # 设置Gap（相对间隙）
     else:
-        model.Params.MIPGap = 0.07
+        model.Params.MIPGap = INT_ARR_GAP
     # 求解模型
     model.optimize()
     # 创建用于返回的离港航班分配数量字典

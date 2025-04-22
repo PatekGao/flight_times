@@ -4,7 +4,7 @@ from gurobipy import GRB
 
 from OR.AirlineHeadingMatch.utils import get_main_headings, get_hour_from_time, diagnose_infeasibility
 from dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_DEP, AIRLINES_WIDE
-
+from config import DOM_DEP_GAP,INT_DEP_GAP,DOM_DEP_WAVE_BIAS,INT_DEP_WAVE_BIAS,DOM_DEP_WIDE_BIAS,INT_DEP_WIDE_BIAS
 
 def assign_departure_flights(arrival_assignments, departure_flights, current_status, market_type, hourly_dom_dep_stats,
                              hourly_int_dep_stats):
@@ -336,9 +336,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
             if current_count > 0:
                 # 波形偏移
                 if market_type == 'DOM':
-                    bias = 4
+                    bias = DOM_DEP_WAVE_BIAS
                 else:
-                    bias = 2
+                    bias = INT_DEP_WAVE_BIAS
                 model.addConstr(
                     assigned_count_expr + unassigned_count_expr >= current_count - bias,
                     f"hourly_wave_{airline}_{hour}_{market_type}_Departure"
@@ -366,9 +366,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
         # 添加约束：宽体机总数量必须等于配额
         # 宽体偏移
         if market_type == 'DOM':
-            bias = 3
+            bias = DOM_DEP_WIDE_BIAS
         else:
-            bias = 1
+            bias = INT_DEP_WIDE_BIAS
         model.addConstr(
             assigned_wide_body_count + unassigned_wide_body_expr >= wide_body_quota - bias,
             f"wide_body_quota_{airline}_{market_type}_min_Departure"
@@ -562,7 +562,10 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
     # 设置目标函数为最小化偏离度
     model.setObjective(airline_wave_deviation * 10000 + obj_expr, GRB.MINIMIZE)
-    model.Params.MIPGap = 0.01  # 设置Gap为1%（相对间隙）
+    if market_type == 'DOM':
+        model.Params.MIPGap = DOM_DEP_GAP  # 设置Gap（相对间隙）
+    else:
+        model.Params.MIPGap = INT_DEP_GAP
 
     # 求解模型
     model.optimize()

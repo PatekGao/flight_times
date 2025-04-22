@@ -2,9 +2,8 @@ from arrival_assignment import *
 from departure_assignment import *
 from process_final_result import *
 from utils import load_data, complete_day1_assignments, complete_day3_assignments
+from config import OUTPUT_FILE, FINAL_FILE
 
-OUTPUT_FILE = "final_result.xlsx"
-FINAL_FILE = "final_result_processed.xlsx"
 
 def main():
     # 加载数据
@@ -54,6 +53,7 @@ def main():
     print(f"分配完成！结果已保存到 {OUTPUT_FILE}")
 
     process_excel(OUTPUT_FILE, FINAL_FILE)
+
 
 if __name__ == "__main__":
     main()

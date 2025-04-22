@@ -2,11 +2,8 @@ import pandas as pd
 
 from OR.AirlineHeadingMatch.dataset import HEADINGS_DEP, HEADINGS_ARR
 
-# 文件路径
-CURRENT_STATUS_FILE = "2024_现状.xlsx"
-PAIRING_FILE = "final_pairing_processed.xlsx"
-ARR_HOURLY_STATS_FILE = "到达航班比例表.xlsx"  # 新增文件路径
-DEP_HOURLY_STATS_FILE = "出发航班比例表.xlsx"
+from config import CURRENT_STATUS_FILE, PAIRING_FILE, ARR_HOURLY_STATS_FILE, DEP_HOURLY_STATS_FILE
+
 
 def diagnose_infeasibility(model):
     """
