@@ -55,3 +55,24 @@ AIRLINES_WIDE = {
     '南航集团': {'DOM': 2, 'INT': 0},
     '其它': {'DOM': 1, 'INT': 14},
 }
+
+# 绝对远程航向航司集团
+ABSOLUTE_LONG_ROUTING = ['东航集团', '南航集团', '海航集团']
+
+# 不能有宽体机的航向
+ARR_DOM_WIDE_EXCEPTION_ROUTING = ['IGNAK']
+ARR_INT_WIDE_EXCEPTION_ROUTING = ['LADUP']
+DEP_DOM_WIDE_EXCEPTION_ROUTING = ['MUMGO']
+DEP_INT_WIDE_EXCEPTION_ROUTING = ['LUVEN']
+
+# 宽体机比例升高的航向
+ARR_DOM_WIDE_UP_ROUTING = []
+ARR_INT_WIDE_UP_ROUTING = []
+DEP_DOM_WIDE_UP_ROUTING = ['LUVEN', 'SAGPI']
+DEP_INT_WIDE_UP_ROUTING = []
+
+# 主航向比例约束例外航司集团
+MAIN_HEADING_EXCEPTION_AIRLINES = ['海航集团', '其它']
+
+# 波形约束例外航司集团
+WAVE_EXCEPTION_AIRLINES = ['海航集团', '其它']

@@ -3,8 +3,11 @@ import pandas as pd
 from gurobipy import GRB
 
 from OR.AirlineHeadingMatch.utils import get_main_headings, get_hour_from_time, diagnose_infeasibility
-from dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_ARR, AIRLINES_WIDE
-from config import DOM_ARR_GAP,INT_ARR_GAP,DOM_ARR_WAVE_BIAS,INT_ARR_WAVE_BIAS,DOM_ARR_WIDE_BIAS,INT_ARR_WIDE_BIAS
+from config import DOM_ARR_GAP, INT_ARR_GAP, DOM_ARR_WAVE_BIAS, INT_ARR_WAVE_BIAS, DOM_ARR_WIDE_BIAS, INT_ARR_WIDE_BIAS
+from excel_to_dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_ARR, AIRLINES_WIDE, ABSOLUTE_LONG_ROUTING, \
+    MAIN_HEADING_EXCEPTION_AIRLINES, WAVE_EXCEPTION_AIRLINES, ARR_DOM_WIDE_EXCEPTION_ROUTING, \
+    ARR_INT_WIDE_EXCEPTION_ROUTING,ARR_INT_WIDE_UP_ROUTING,ARR_DOM_WIDE_UP_ROUTING
+
 
 def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_dom_stats, hourly_int_stats,
                            departure_flights=None, prev_dom_dep_counts=None, prev_int_dep_counts=None):
@@ -43,13 +46,19 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
     day2_arrivals.loc[:, '小时'] = day2_arrivals['时间'].apply(get_hour_from_time)
     current_arrivals.loc[:, '小时'] = (current_arrivals['Minute for rolling'] // 60) % 24
 
+    # 获取现状中各航司的航向数据
+    airline_heading_pairs = current_arrivals.groupby(['AirlineGroup', 'Routing']).size().reset_index()
+    valid_airline_heading_pairs = set(zip(airline_heading_pairs['AirlineGroup'], airline_heading_pairs['Routing']))
+    
     # 获取所有可能的航司和航向
     if market_type == 'DOM':
         airlines_data = DOM_AIRLINES
         headings_data = HEADINGS_ARR
+        wide_up_routings = ARR_DOM_WIDE_UP_ROUTING
     else:
         airlines_data = INT_AIRLINES
         headings_data = HEADINGS_ARR
+        wide_up_routings = ARR_INT_WIDE_UP_ROUTING
 
     all_airlines = []
     for base_type in airlines_data:
@@ -77,8 +86,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
             for heading, heading_type in all_headings:
                 # 检查是否满足约束条件
                 # 1. 绝对远程航向只分配给主基地航司或东航南航海航集团
-                if market_type == 'INT' and heading_type == '绝对远程' and base_type == '非主基地' and airline not in [
-                    '东航集团', '南航集团', '海航集团']:
+                if market_type == 'INT' and heading_type == '绝对远程' and base_type == '非主基地' and airline not in ABSOLUTE_LONG_ROUTING:
                     continue
 
                 # 2. 绝对远程航向分配宽体机
@@ -87,10 +95,14 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
 
                 # 3. 特定航向不能有宽体机
                 if is_wide_body:
-                    if market_type == 'DOM' and heading == 'IGNAK':
+                    if market_type == 'DOM' and heading in ARR_DOM_WIDE_EXCEPTION_ROUTING:
                         continue
-                    if market_type == 'INT' and heading == 'LADUP':
+                    if market_type == 'INT' and heading == ARR_INT_WIDE_EXCEPTION_ROUTING:
                         continue
+                
+                # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
+                if airline != '其它' and (airline, heading) not in valid_airline_heading_pairs:
+                    continue
 
                 x[flight_id, airline, heading] = model.addVar(vtype=GRB.BINARY,
                                                               name=f"x_{flight_id}_{airline}_{heading}")
@@ -138,7 +150,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
 
     # 主航向比例约束：确保各航司的主航向比例不低于现状
     for airline, _ in all_airlines:
-        if airline in ['海航集团', '其它']:
+        if airline in MAIN_HEADING_EXCEPTION_AIRLINES:
             continue
 
         key = (airline, market_type, 'Arrival')
@@ -232,7 +244,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
 
     # 为每个航司和每个小时添加约束
     for airline, _ in all_airlines:
-        if airline in ['海航集团', '其它']:
+        if airline in WAVE_EXCEPTION_AIRLINES:
             continue
 
         for hour in range(24):
@@ -292,6 +304,51 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
             wide_body_expr <= wide_body_quota + bias ,
             f"wide_body_quota_{airline}_{market_type}_max_Arrival"
         )
+
+    # 添加宽体机比例升高约束
+    if wide_up_routings:  # 如果有需要提高宽体机比例的航向
+        # 计算现状中各航向的宽体机比例
+        current_wide_ratio = {}
+        for heading in wide_up_routings:
+            # 筛选该航向的航班
+            heading_flights = current_arrivals[current_arrivals['Routing'] == heading]
+            if not heading_flights.empty:
+                # 计算宽体机航班数量
+                wide_count = heading_flights[heading_flights['Acft Cat'].isin(['E', 'F'])].shape[0]
+                total_count = heading_flights.shape[0]
+                if total_count > 0:
+                    current_wide_ratio[heading] = wide_count / total_count
+                else:
+                    current_wide_ratio[heading] = 0
+            else:
+                current_wide_ratio[heading] = 0
+
+        # 为每个需要提高宽体机比例的航向添加约束
+        for heading in wide_up_routings:
+            if heading in current_wide_ratio:
+                # 计算未来该航向的总航班数
+                future_total_expr = gp.quicksum(
+                    x[flight_id, airline, heading]
+                    for i, flight in day2_arrivals.iterrows()
+                    for airline, _ in all_airlines
+                    if (flight_id := flight['ID'], airline, heading) in x
+                )
+
+                # 计算未来该航向的宽体机航班数
+                future_wide_expr = gp.quicksum(
+                    x[flight_id, airline, heading]
+                    for i, flight in day2_arrivals.iterrows()
+                    for airline, _ in all_airlines
+                    if (flight_id := flight['ID'], airline, heading) in x
+                    and flight['机型'] in ['E', 'F']
+                )
+
+                # 添加约束：未来宽体机比例 > 现状宽体机比例
+                if future_total_expr.size() > 0:  # 确保有航班分配给该航向
+                    model.addConstr(
+                        future_wide_expr >= current_wide_ratio[heading] * future_total_expr,
+                        f"wide_body_ratio_increase_{heading}_{market_type}_Arrival"
+                    )
 
     # 添加基于小时统计数据的约束和目标函数
     # 目标函数：最大化与小时统计数据的匹配度

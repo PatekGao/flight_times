@@ -3,8 +3,11 @@ import pandas as pd
 from gurobipy import GRB
 
 from OR.AirlineHeadingMatch.utils import get_main_headings, get_hour_from_time, diagnose_infeasibility
-from dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_DEP, AIRLINES_WIDE
-from config import DOM_DEP_GAP,INT_DEP_GAP,DOM_DEP_WAVE_BIAS,INT_DEP_WAVE_BIAS,DOM_DEP_WIDE_BIAS,INT_DEP_WIDE_BIAS
+from config import DOM_DEP_GAP, INT_DEP_GAP, DOM_DEP_WAVE_BIAS, INT_DEP_WAVE_BIAS, DOM_DEP_WIDE_BIAS, INT_DEP_WIDE_BIAS
+from excel_to_dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_DEP, AIRLINES_WIDE, ABSOLUTE_LONG_ROUTING, \
+    MAIN_HEADING_EXCEPTION_AIRLINES, WAVE_EXCEPTION_AIRLINES, DEP_DOM_WIDE_EXCEPTION_ROUTING, \
+    DEP_INT_WIDE_EXCEPTION_ROUTING,DEP_INT_WIDE_UP_ROUTING,DEP_DOM_WIDE_UP_ROUTING
+
 
 def assign_departure_flights(arrival_assignments, departure_flights, current_status, market_type, hourly_dom_dep_stats,
                              hourly_int_dep_stats):
@@ -44,13 +47,19 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
     day2_departures.loc[:, '小时'] = day2_departures['时间'].apply(get_hour_from_time)
     current_departures.loc[:, '小时'] = (current_departures['Minute for rolling'] // 60) % 24
 
+    # 获取现状中各航司的航向数据
+    airline_heading_pairs = current_departures.groupby(['AirlineGroup', 'Routing']).size().reset_index()
+    valid_airline_heading_pairs = set(zip(airline_heading_pairs['AirlineGroup'], airline_heading_pairs['Routing']))
+    
     # 获取所有可能的航司和航向
     if market_type == 'DOM':
         airlines_data = DOM_AIRLINES
         headings_data = HEADINGS_DEP
+        wide_up_routings = DEP_DOM_WIDE_UP_ROUTING
     else:
         airlines_data = INT_AIRLINES
         headings_data = HEADINGS_DEP
+        wide_up_routings = DEP_INT_WIDE_UP_ROUTING
 
     all_airlines = []
     for base_type in airlines_data:
@@ -103,8 +112,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
             for heading, heading_type in all_headings:
                 # 检查是否满足约束条件
                 # 1. 绝对远程航向只分配给主基地航司或东航南航海航集团
-                if market_type == 'INT' and heading_type == '绝对远程' and airline_base_type == '非主基地' and flight_airline not in [
-                    '东航集团', '南航集团', '海航集团']:
+                if market_type == 'INT' and heading_type == '绝对远程' and airline_base_type == '非主基地' and flight_airline not in ABSOLUTE_LONG_ROUTING:
                     continue
 
                 # 2. 绝对远程航向分配宽体机
@@ -113,9 +121,15 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
                 # 3. 特定航向不能有宽体机
                 if is_wide_body:
-                    if market_type == 'DOM' and heading == 'LUVEN':
+                    if market_type == 'DOM' and heading == DEP_DOM_WIDE_EXCEPTION_ROUTING:
                         continue
-                    if market_type == 'INT' and heading == 'MUMGO':
+                    if market_type == 'INT' and heading == DEP_INT_WIDE_EXCEPTION_ROUTING:
+                        continue
+                
+                # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
+                # 特例：国际离港的SAGPI航向可以分配给所有航司
+                if flight_airline != '其它' and (flight_airline, heading) not in valid_airline_heading_pairs:
+                    if not (market_type == 'INT' and heading == 'SAGPI'):
                         continue
 
                 y[flight_id, heading] = model.addVar(vtype=GRB.BINARY, name=f"y_{flight_id}_{heading}")
@@ -138,8 +152,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                 for heading, heading_type in all_headings:
                     # 检查是否满足约束条件
                     # 1. 绝对远程航向只分配给主基地航司或东航南航海航集团
-                    if market_type == 'INT' and heading_type == '绝对远程' and base_type == '非主基地' and airline not in [
-                        '东航集团', '南航集团', '海航集团']:
+                    if market_type == 'INT' and heading_type == '绝对远程' and base_type == '非主基地' and airline not in ABSOLUTE_LONG_ROUTING:
                         continue
 
                     # 2. 绝对远程航向分配宽体机
@@ -147,9 +160,15 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                         continue
                     # 3. 特定航向不能有宽体机
                     if is_wide_body:
-                        if market_type == 'DOM' and heading == 'LUVEN':
+                        if market_type == 'DOM' and heading == DEP_DOM_WIDE_EXCEPTION_ROUTING:
                             continue
-                        if market_type == 'INT' and heading == 'MUMGO':
+                        if market_type == 'INT' and heading == DEP_INT_WIDE_EXCEPTION_ROUTING:
+                            continue
+                    
+                    # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
+                    # 特例：国际离港的SAGPI航向可以分配给所有航司
+                    if airline != '其它' and (airline, heading) not in valid_airline_heading_pairs:
+                        if not (market_type == 'INT' and heading == 'SAGPI'):
                             continue
 
                     # 创建联合变量 w[i, a, h] = z[i, a] * y[i, h]
@@ -233,7 +252,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
     # 主航向比例约束：确保各航司的主航向比例不低于现状
     for airline, _ in all_airlines:
-        if airline in ['海航集团', '其它']:
+        if airline in MAIN_HEADING_EXCEPTION_AIRLINES:
             continue
 
         # if market_type == 'INT' and airline =='海航集团':
@@ -301,7 +320,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
     # 为每个航司和每个小时添加约束
     for airline, _ in all_airlines:
-        if airline in ['海航集团', '其它']:
+        if airline in WAVE_EXCEPTION_AIRLINES:
             continue
 
         for hour in range(24):
@@ -377,6 +396,71 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
             assigned_wide_body_count + unassigned_wide_body_expr <= wide_body_quota + bias,
             f"wide_body_quota_{airline}_{market_type}_max_Departure"
         )
+
+    # 添加宽体机比例升高约束
+    if wide_up_routings:  # 如果有需要提高宽体机比例的航向
+        # 计算现状中各航向的宽体机比例
+        current_wide_ratio = {}
+        for heading in wide_up_routings:
+            # 筛选该航向的航班
+            heading_flights = current_departures[current_departures['Routing'] == heading]
+            if not heading_flights.empty:
+                # 计算宽体机航班数量
+                wide_count = heading_flights[heading_flights['Acft Cat'].isin(['E', 'F'])].shape[0]
+                total_count = heading_flights.shape[0]
+                if total_count > 0:
+                    current_wide_ratio[heading] = wide_count / total_count
+                else:
+                    current_wide_ratio[heading] = 0
+            else:
+                current_wide_ratio[heading] = 0
+
+        # 为每个需要提高宽体机比例的航向添加约束
+        for heading in wide_up_routings:
+            if heading in current_wide_ratio:
+                # 计算未来该航向的总航班数 - 已分配航司的航班
+                assigned_total_expr = gp.quicksum(
+                    y[flight_id, heading]
+                    for i, flight in day2_departures.iterrows()
+                    if result_df.loc[i, '航司'] and (flight_id := flight['ID'], heading) in y
+                )
+
+                # 计算未来该航向的宽体机航班数 - 已分配航司的航班
+                assigned_wide_expr = gp.quicksum(
+                    y[flight_id, heading]
+                    for i, flight in day2_departures.iterrows()
+                    if result_df.loc[i, '航司'] and (flight_id := flight['ID'], heading) in y
+                    and flight['机型'] in ['E', 'F']
+                )
+
+                # 计算未来该航向的总航班数 - 未分配航司的航班
+                unassigned_total_expr = gp.quicksum(
+                    y[flight_id, heading, airline]
+                    for i, flight in day2_departures.iterrows()
+                    if not result_df.loc[i, '航司']
+                    for airline, _ in all_airlines
+                    if (flight_id := flight['ID'], heading, airline) in y
+                )
+
+                # 计算未来该航向的宽体机航班数 - 未分配航司的航班
+                unassigned_wide_expr = gp.quicksum(
+                    y[flight_id, heading, airline]
+                    for i, flight in day2_departures.iterrows()
+                    if not result_df.loc[i, '航司']
+                    for airline, _ in all_airlines
+                    if (flight_id := flight['ID'], heading, airline) in y
+                    and flight['机型'] in ['E', 'F']
+                )
+
+                # 添加约束：未来宽体机比例 > 现状宽体机比例
+                total_expr = assigned_total_expr + unassigned_total_expr
+                wide_expr = assigned_wide_expr + unassigned_wide_expr
+
+                if total_expr.size() > 0:  # 确保有航班分配给该航向
+                    model.addConstr(
+                        wide_expr >= current_wide_ratio[heading] * total_expr,
+                        f"wide_body_ratio_increase_{heading}_{market_type}_Departure"
+                    )
 
     # 添加基于小时统计数据的约束和目标函数
     # 目标函数：最小化未来分布与当前分布的偏离度
