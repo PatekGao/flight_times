@@ -121,9 +121,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
                 # 3. 特定航向不能有宽体机
                 if is_wide_body:
-                    if market_type == 'DOM' and heading == DEP_DOM_WIDE_EXCEPTION_ROUTING:
+                    if market_type == 'DOM' and heading in DEP_DOM_WIDE_EXCEPTION_ROUTING:
                         continue
-                    if market_type == 'INT' and heading == DEP_INT_WIDE_EXCEPTION_ROUTING:
+                    if market_type == 'INT' and heading in DEP_INT_WIDE_EXCEPTION_ROUTING:
                         continue
                 
                 # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
@@ -160,9 +160,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                         continue
                     # 3. 特定航向不能有宽体机
                     if is_wide_body:
-                        if market_type == 'DOM' and heading == DEP_DOM_WIDE_EXCEPTION_ROUTING:
+                        if market_type == 'DOM' and heading in DEP_DOM_WIDE_EXCEPTION_ROUTING:
                             continue
-                        if market_type == 'INT' and heading == DEP_INT_WIDE_EXCEPTION_ROUTING:
+                        if market_type == 'INT' and heading in DEP_INT_WIDE_EXCEPTION_ROUTING:
                             continue
                     
                     # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
@@ -386,6 +386,8 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
         # 宽体偏移
         if market_type == 'DOM':
             bias = DOM_DEP_WIDE_BIAS
+            if airline == '其它':
+                bias = 6
         else:
             bias = INT_DEP_WIDE_BIAS
         model.addConstr(
@@ -458,7 +460,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
 
                 if total_expr.size() > 0:  # 确保有航班分配给该航向
                     model.addConstr(
-                        wide_expr >= current_wide_ratio[heading] * total_expr,
+                        wide_expr - 0.0001 >= current_wide_ratio[heading] * total_expr,
                         f"wide_body_ratio_increase_{heading}_{market_type}_Departure"
                     )
 

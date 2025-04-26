@@ -97,7 +97,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
                 if is_wide_body:
                     if market_type == 'DOM' and heading in ARR_DOM_WIDE_EXCEPTION_ROUTING:
                         continue
-                    if market_type == 'INT' and heading == ARR_INT_WIDE_EXCEPTION_ROUTING:
+                    if market_type == 'INT' and heading in ARR_INT_WIDE_EXCEPTION_ROUTING:
                         continue
                 
                 # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
