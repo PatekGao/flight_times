@@ -1,6 +1,6 @@
 import pandas as pd
 
-from pre_task2 import peak_results
+from OR.TableGeneration.pre_task2 import peak_results
 
 
 # 预处理函数：将时间字符串转换为分钟数
