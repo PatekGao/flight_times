@@ -173,6 +173,18 @@ model.setObjective(smooth_obj, GRB.MINIMIZE)
 # 求解模型
 model.optimize()
 
+# 检查模型是否无解，如果无解则进行IIS分析
+if model.status == 4:
+    print("模型无解，正在分析导致无解的约束条件...")
+    # 计算IIS（Irreducible Inconsistent Subsystem）
+    model.computeIIS()
+    print("\n以下约束条件导致模型无解:")
+    for c in model.getConstrs():
+        if c.IISConstr:
+            print(f"约束名称: {c.ConstrName}")
+            print(f"约束表达式: {c.Sense} {c.RHS}")
+            print("-" * 50)
+
 # 提取结果
 if model.status == GRB.OPTIMAL:
     dynamic_schedule = []

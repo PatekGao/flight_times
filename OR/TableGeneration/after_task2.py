@@ -112,6 +112,7 @@ for config in peak_configs:
     target_arr = arr_df[(arr_df['ID'].notna()) & (arr_df['日期'] == 2)]
     target_arr['分钟'] = target_arr['时间'].apply(time_to_minutes)
     target_arr = target_arr[(target_arr['分钟'] >= start_min) & (target_arr['分钟'] <= end_min)]
+    target_arr = target_arr[target_arr['市场'] == config['market']]
     # 筛选到达航班
     selected = [
         i for i, arr in enumerate(arr_flights)
@@ -135,6 +136,19 @@ for config in peak_configs:
 
 # 求解模型
 model.optimize()
+
+# 检查模型是否无解，如果无解则进行IIS分析
+if model.status == 3:
+    print("模型无解，正在分析导致无解的约束条件...")
+    # 计算IIS（Irreducible Inconsistent Subsystem）
+    model.computeIIS()
+    print("\n以下约束条件导致模型无解:")
+    for c in model.getConstrs():
+        if c.IISConstr:
+            print(f"约束名称: {c.ConstrName}")
+            print(f"约束表达式: {c.Sense} {c.RHS}")
+            print("-" * 50)
+
 
 # 处理配对结果
 pair_id = max(arr_df['ID'].max(), dep_df['ID'].max()) + 1
