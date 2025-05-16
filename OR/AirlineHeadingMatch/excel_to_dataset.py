@@ -1,9 +1,10 @@
 import pandas as pd
-
+from config import TEMPLATE_FILE
 
 def read_excel_template():
     # 读取Excel文件
-    file_path = '输入模板.xlsx'
+    file_path = TEMPLATE_FILE
+    # file_path = '输入模板.xlsx'
 
     def read_domestic_airlines(df):
         # 从第4行开始读取数据
