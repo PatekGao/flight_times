@@ -136,15 +136,27 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
     for heading, heading_type in all_headings:
         if market_type == 'DOM':
             quota = HEADINGS_ARR[heading]['DOM']
+            bias = 0  # 使用DOM的偏差值
         else:
             quota = HEADINGS_ARR[heading]['INT']
+            bias = 0  # 使用INT的偏差值
 
+        # 添加下限约束
         model.addConstr(
             gp.quicksum(x[flight_id, airline, heading]
                         for i, flight in day2_arrivals.iterrows()
                         for airline, _ in all_airlines
-                        if (flight_id := flight['ID'], airline, heading) in x) == quota,
-            f"heading_quota_{heading}"
+                        if (flight_id := flight['ID'], airline, heading) in x) >= quota - bias,
+            f"heading_quota_min_{heading}"
+        )
+
+        # 添加上限约束
+        model.addConstr(
+            gp.quicksum(x[flight_id, airline, heading]
+                        for i, flight in day2_arrivals.iterrows()
+                        for airline, _ in all_airlines
+                        if (flight_id := flight['ID'], airline, heading) in x) <= quota + bias,
+            f"heading_quota_max_{heading}"
         )
 
     # 主航向比例约束：确保各航司的主航向比例不低于现状

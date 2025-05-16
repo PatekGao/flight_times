@@ -233,8 +233,10 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
     for heading, heading_type in all_headings:
         if market_type == 'DOM':
             quota = HEADINGS_DEP[heading]['DOM']
+            bias = 0  # 使用DOM的偏差值
         else:
             quota = HEADINGS_DEP[heading]['INT']
+            bias = 0  # 使用INT的偏差值
 
         # 对于已分配航司的航班
         assigned_expr = gp.quicksum(y[flight_id, heading]
@@ -248,7 +250,8 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                                       for airline, _ in all_airlines
                                       if (flight_id := flight['ID'], heading, airline) in y)
 
-        model.addConstr(assigned_expr + unassigned_expr == quota, f"heading_quota_{heading}")
+        model.addConstr(assigned_expr + unassigned_expr >= quota - bias, f"heading_quota_min_{heading}")
+        model.addConstr(assigned_expr + unassigned_expr <= quota + bias, f"heading_quota_max_{heading}")
 
     # 主航向比例约束：确保各航司的主航向比例不低于现状
     for airline, _ in all_airlines:
