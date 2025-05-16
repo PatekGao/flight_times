@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 from gurobipy import Model, GRB, quicksum
 
-from utils import quotas, min_times, peak_configs
+from utils import quotas, min_times
+from utils2 import peak_configs
 
 
 # 预处理函数：将时间字符串转换为分钟数
