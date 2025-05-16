@@ -7,7 +7,7 @@ from config import DOM_ARR_GAP, INT_ARR_GAP, DOM_ARR_WAVE_BIAS, INT_ARR_WAVE_BIA
 from excel_to_dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_ARR, AIRLINES_WIDE, ABSOLUTE_LONG_ROUTING, \
     MAIN_HEADING_EXCEPTION_AIRLINES, WAVE_EXCEPTION_AIRLINES, ARR_DOM_WIDE_EXCEPTION_ROUTING, \
     ARR_INT_WIDE_EXCEPTION_ROUTING, ARR_INT_WIDE_UP_ROUTING, ARR_DOM_WIDE_UP_ROUTING
-from airline_heading_exceptions import get_valid_airline_heading_pairs
+from exceptions import get_valid_airline_heading_pairs
 
 
 def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_dom_stats, hourly_int_stats,
