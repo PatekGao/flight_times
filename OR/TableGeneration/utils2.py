@@ -1,8 +1,7 @@
 import pandas as pd
 from OR.TableGeneration.pre_task2 import peak_results
-from OR.TableGeneration.utils import DOM_MAX, ARR_DOM_MAX, DEP_DOM_MAX, INT_MAX, ARR_INT_MAX, DEP_INT_MAX
+from OR.TableGeneration.utils import DOM_MAX, ARR_DOM_MAX, DEP_DOM_MAX, INT_MAX, ARR_INT_MAX, DEP_INT_MAX, xls
 
-xls = pd.ExcelFile("python时刻表输入v3.xlsx")
 df2 = pd.read_excel(xls, sheet_name="其它参数设置")
 
 DOM_window, DOM_count = peak_results['国内双向']

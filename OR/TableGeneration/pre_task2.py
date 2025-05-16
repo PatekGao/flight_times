@@ -1,8 +1,8 @@
 from datetime import timedelta, datetime
 
 import pandas as pd
+from utils import xls
 
-xls = pd.ExcelFile("python时刻表输入v3.xlsx")
 df2 = pd.read_excel(xls, sheet_name="其它参数设置")
 DOM_MIX_p = df2.iloc[20, 3]
 INT_MIX_p = df2.iloc[20, 4]
