@@ -55,7 +55,7 @@ def count_in_window(start_min, market, direction):
 
 # 读取Excel文件
 # df = pd.read_excel('TFU_dynamic_sheet2040_rand_smooth_2-23_ZG.xlsx', dtype={'Time': str})
-df = pd.read_excel('task1_3-9.xlsx', dtype={'Time': str})
+df = pd.read_excel('dynamic_sheet.xlsx', dtype={'Time': str})
 # 各类型高峰时段统计：
 # 国内双向    : 13:20-14:15 (119 架次)(0.84%)
 # 国内进港    : 13:30-14:25 (71 架次)(1.41%)
