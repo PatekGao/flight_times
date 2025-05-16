@@ -6,7 +6,7 @@ from OR.AirlineHeadingMatch.utils import get_main_headings, get_hour_from_time, 
 from config import DOM_DEP_GAP, INT_DEP_GAP, DOM_DEP_WAVE_BIAS, INT_DEP_WAVE_BIAS, DOM_DEP_WIDE_BIAS, INT_DEP_WIDE_BIAS
 from excel_to_dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_DEP, AIRLINES_WIDE, ABSOLUTE_LONG_ROUTING, \
     MAIN_HEADING_EXCEPTION_AIRLINES, WAVE_EXCEPTION_AIRLINES, DEP_DOM_WIDE_EXCEPTION_ROUTING, \
-    DEP_INT_WIDE_EXCEPTION_ROUTING,DEP_INT_WIDE_UP_ROUTING,DEP_DOM_WIDE_UP_ROUTING
+    DEP_INT_WIDE_EXCEPTION_ROUTING, DEP_INT_WIDE_UP_ROUTING, DEP_DOM_WIDE_UP_ROUTING
 
 
 def assign_departure_flights(arrival_assignments, departure_flights, current_status, market_type, hourly_dom_dep_stats,
@@ -125,7 +125,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                         continue
                     if market_type == 'INT' and heading in DEP_INT_WIDE_EXCEPTION_ROUTING:
                         continue
-                
+
                 # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
                 # 特例：国际离港的SAGPI航向可以分配给所有航司
                 if flight_airline != '其它' and (flight_airline, heading) not in valid_airline_heading_pairs:
@@ -164,7 +164,7 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
                             continue
                         if market_type == 'INT' and heading in DEP_INT_WIDE_EXCEPTION_ROUTING:
                             continue
-                    
+
                     # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
                     # 特例：国际离港的SAGPI航向可以分配给所有航司
                     if airline != '其它' and (airline, heading) not in valid_airline_heading_pairs:

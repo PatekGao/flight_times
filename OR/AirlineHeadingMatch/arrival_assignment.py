@@ -6,7 +6,7 @@ from OR.AirlineHeadingMatch.utils import get_main_headings, get_hour_from_time, 
 from config import DOM_ARR_GAP, INT_ARR_GAP, DOM_ARR_WAVE_BIAS, INT_ARR_WAVE_BIAS, DOM_ARR_WIDE_BIAS, INT_ARR_WIDE_BIAS
 from excel_to_dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_ARR, AIRLINES_WIDE, ABSOLUTE_LONG_ROUTING, \
     MAIN_HEADING_EXCEPTION_AIRLINES, WAVE_EXCEPTION_AIRLINES, ARR_DOM_WIDE_EXCEPTION_ROUTING, \
-    ARR_INT_WIDE_EXCEPTION_ROUTING,ARR_INT_WIDE_UP_ROUTING,ARR_DOM_WIDE_UP_ROUTING
+    ARR_INT_WIDE_EXCEPTION_ROUTING, ARR_INT_WIDE_UP_ROUTING, ARR_DOM_WIDE_UP_ROUTING
 
 
 def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_dom_stats, hourly_int_stats,
@@ -80,7 +80,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
         flight_id = flight['ID']
         flight_hour = flight['小时']
         flight_acft = flight['机型']
-        is_wide_body = flight_acft in ['E','F']
+        is_wide_body = flight_acft in ['E', 'F']
 
         for airline, base_type in all_airlines:
             for heading, heading_type in all_headings:
@@ -99,7 +99,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
                         continue
                     if market_type == 'INT' and heading in ARR_INT_WIDE_EXCEPTION_ROUTING:
                         continue
-                
+
                 # 4. 新增约束：只有当航司在现状中存在该航向时，才能分配
                 if airline != '其它' and (airline, heading) not in valid_airline_heading_pairs:
                     continue
@@ -124,13 +124,12 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
             quota = DOM_AIRLINES[base_type][airline]['ARR']
         else:
             quota = INT_AIRLINES[base_type][airline]['ARR']
-
         model.addConstr(
             gp.quicksum(x[flight_id, airline, heading]
                         for i, flight in day2_arrivals.iterrows()
                         for heading, _ in all_headings
                         if (flight_id := flight['ID'], airline, heading) in x) == quota,
-            f"airline_quota_{airline}"
+            f"{market_type}_airline_quota_{airline}"
         )
 
     # 航向配额约束
@@ -297,11 +296,11 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
         else:
             bias = INT_ARR_WIDE_BIAS
         model.addConstr(
-            wide_body_expr >= wide_body_quota - bias ,
+            wide_body_expr >= wide_body_quota - bias,
             f"wide_body_quota_{airline}_{market_type}_min_Arrival"
         )
         model.addConstr(
-            wide_body_expr <= wide_body_quota + bias ,
+            wide_body_expr <= wide_body_quota + bias,
             f"wide_body_quota_{airline}_{market_type}_max_Arrival"
         )
 
@@ -346,7 +345,7 @@ def assign_arrival_flights(current_status, arrival_flights, market_type, hourly_
                 # 添加约束：未来宽体机比例 > 现状宽体机比例
                 if future_total_expr.size() > 0:  # 确保有航班分配给该航向
                     model.addConstr(
-                        future_wide_expr >= current_wide_ratio[heading] * future_total_expr,
+                        future_wide_expr - 0.0001 >= current_wide_ratio[heading] * future_total_expr,
                         f"wide_body_ratio_increase_{heading}_{market_type}_Arrival"
                     )
 
