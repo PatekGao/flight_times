@@ -1,6 +1,6 @@
 import pandas as pd
 
-from OR.AirlineHeadingMatch.dataset import HEADINGS_DEP, HEADINGS_ARR
+from excel_to_dataset import HEADINGS_DEP,HEADINGS_ARR
 
 from config import CURRENT_STATUS_FILE, PAIRING_FILE, ARR_HOURLY_STATS_FILE, DEP_HOURLY_STATS_FILE
 
