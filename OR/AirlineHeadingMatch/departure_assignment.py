@@ -7,6 +7,7 @@ from config import DOM_DEP_GAP, INT_DEP_GAP, DOM_DEP_WAVE_BIAS, INT_DEP_WAVE_BIA
 from excel_to_dataset import DOM_AIRLINES, INT_AIRLINES, HEADINGS_DEP, AIRLINES_WIDE, ABSOLUTE_LONG_ROUTING, \
     MAIN_HEADING_EXCEPTION_AIRLINES, WAVE_EXCEPTION_AIRLINES, DEP_DOM_WIDE_EXCEPTION_ROUTING, \
     DEP_INT_WIDE_EXCEPTION_ROUTING, DEP_INT_WIDE_UP_ROUTING, DEP_DOM_WIDE_UP_ROUTING
+from airline_heading_exceptions import get_valid_airline_heading_pairs
 
 
 def assign_departure_flights(arrival_assignments, departure_flights, current_status, market_type, hourly_dom_dep_stats,
@@ -50,7 +51,9 @@ def assign_departure_flights(arrival_assignments, departure_flights, current_sta
     # 获取现状中各航司的航向数据
     airline_heading_pairs = current_departures.groupby(['AirlineGroup', 'Routing']).size().reset_index()
     valid_airline_heading_pairs = set(zip(airline_heading_pairs['AirlineGroup'], airline_heading_pairs['Routing']))
-    
+
+    valid_airline_heading_pairs.update(get_valid_airline_heading_pairs(market_type, 'DEP'))
+
     # 获取所有可能的航司和航向
     if market_type == 'DOM':
         airlines_data = DOM_AIRLINES
