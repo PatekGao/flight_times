@@ -31,10 +31,10 @@ b_indicators = {
 for h in range(24):
     start = h * 12
     end = start + 12
-    model.addConstr(gp.quicksum(arr_dom[t] for t in range(start, end)) == H_arr_dom[h], name="H_ARR_DOM")
-    model.addConstr(gp.quicksum(arr_int[t] for t in range(start, end)) == H_arr_int[h], name="H_ARR_INT")
-    model.addConstr(gp.quicksum(dep_dom[t] for t in range(start, end)) == H_dep_dom[h], name="H_dep_dom")
-    model.addConstr(gp.quicksum(dep_int[t] for t in range(start, end)) == H_dep_int[h], name="H_dep_int")
+    model.addConstr(gp.quicksum(arr_dom[t] for t in range(start, end)) == H_arr_dom[h], name=f"{h}小时_H_ARR_DOM")
+    model.addConstr(gp.quicksum(arr_int[t] for t in range(start, end)) == H_arr_int[h], name=f"{h}小时_H_ARR_INT")
+    model.addConstr(gp.quicksum(dep_dom[t] for t in range(start, end)) == H_dep_dom[h], name=f"{h}小时_H_dep_dom")
+    model.addConstr(gp.quicksum(dep_int[t] for t in range(start, end)) == H_dep_int[h], name=f"{h}小时_H_dep_int")
 
 # 约束2：滑动窗口总和 <= 动态小时最大值（细分类别）
 for i in range(277):  # 277滑动窗口
@@ -98,10 +98,10 @@ for t in range(num_periods):
 
 # 约束5：每五分钟未来值 >= 现状值
 for t in range(num_periods):
-    model.addConstr(arr_dom[t] >= ref_arr_dom[t], name="REF_ARR_DOM")
-    model.addConstr(dep_dom[t] >= ref_dep_dom[t], name="REF_DEP_DOM")
-    model.addConstr(arr_int[t] >= ref_arr_int[t], name="REF_ARR_INT")
-    model.addConstr(dep_int[t] >= ref_dep_int[t], name="REF_DEP_INT")
+    model.addConstr(arr_dom[t] >= ref_arr_dom[t], name=f"{5*t}分钟_REF_ARR_DOM")
+    model.addConstr(dep_dom[t] >= ref_dep_dom[t], name=f"{5*t}分钟_REF_DEP_DOM")
+    model.addConstr(arr_int[t] >= ref_arr_int[t], name=f"{5*t}分钟_REF_ARR_INT")
+    model.addConstr(dep_int[t] >= ref_dep_int[t], name=f"{5*t}分钟_REF_DEP_INT")
 
 # 约束6：进出港15分钟上限值 （进出港15分钟上限值均为28，双向为45）
 for i in range(num_periods - 2):

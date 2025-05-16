@@ -3,7 +3,8 @@ from collections import defaultdict
 import pandas as pd
 from gurobipy import Model, GRB, quicksum
 
-from utils import quotas, min_times, dep_hour_distribution, peak_configs, DOM_INT_MIX_p
+from utils import quotas, min_times, dep_hour_distribution, DOM_INT_MIX_p
+from utils2 import peak_configs
 
 # 读取Excel文件中的到达和出发航班数据
 arr_df = pd.read_excel('pre_task2.xlsx', sheet_name='到达航班')
@@ -203,9 +204,12 @@ for (i, j, k), var in variables.items():
 # 添加小时分布约束
 for (h, market), vars_list in hourly_dep_vars.items():
     if (h, market) in hour_limits:
+        # 检查hour_limits中的值是否为nan
+        if pd.isna(hour_limits[(h, market)]):
+            continue
         original = hour_limits[(h, market)]
         # 计算允许的上下限
-        bias = 3
+        bias = 0
         upper_bound = original + bias
         lower_bound = max(0, original - bias)  # 保证下限不低于0
 
